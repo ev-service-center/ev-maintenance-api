@@ -1,7 +1,7 @@
 ﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 
-namespace EVServiceCenterMaintenanceAPI.Services
+namespace EVServiceCenterMaintenanceAPI.Utils
 {
     public static class JwtHelper
     {

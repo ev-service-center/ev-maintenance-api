@@ -2,6 +2,7 @@ using EVServiceCenterMaintenanceAPI.DAO;
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Models;
 using EVServiceCenterMaintenanceAPI.Services;
+using EVServiceCenterMaintenanceAPI.Utils;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -62,6 +63,7 @@ builder.Services.AddCors(options =>
 builder.Services.AddScoped<UserDao>();
 builder.Services.AddScoped<AuthDao>();
 builder.Services.AddScoped<EmailService>();
+builder.Services.Configure<EmailSetting>(builder.Configuration.GetSection("EmailSettings"));
 
 // Configure Authentication
 builder.Services.AddAuthentication(options =>

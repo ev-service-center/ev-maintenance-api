@@ -2,11 +2,25 @@
 using System.Net;
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Utils;
+using Microsoft.Extensions.Options;
 
 namespace EVServiceCenterMaintenanceAPI.Services
 {
     public class EmailService
     {
+        private readonly EmailSetting _emailSetting;
+        private readonly SmtpClient _smtpClient;
+        public EmailService(IOptions<EmailSetting> emailSetting)
+        {
+            _emailSetting = emailSetting.Value;
+            _smtpClient = new SmtpClient(_emailSetting.Server)
+            {
+                Port = _emailSetting.Port,
+                Credentials = new NetworkCredential(_emailSetting.Username, _emailSetting.Password),
+                EnableSsl = true,
+            };
+        }
         public async Task SendEmailAsync(string toEmail, string subject, string body, bool isBodyHtml = true)
         {
             if (string.IsNullOrWhiteSpace(toEmail))
@@ -16,31 +30,20 @@ namespace EVServiceCenterMaintenanceAPI.Services
             if (string.IsNullOrWhiteSpace(body))
                 throw new ArgumentException("Body cannot be empty.", nameof(body));
 
-            var smtpHost = "smtp.gmail.com";
-            var smtpPort = 587;
-            var smtpUsername = "nvkhang0099@gmail.com";
-            var smtpPassword = "mzljsjirybeaazai";
-
-            if (string.IsNullOrWhiteSpace(smtpHost) || smtpPort == 0 || string.IsNullOrWhiteSpace(smtpUsername) || string.IsNullOrWhiteSpace(smtpPassword))
+            if (string.IsNullOrWhiteSpace(_emailSetting.Server) || _emailSetting.Port == 0 || string.IsNullOrWhiteSpace(_emailSetting.Username) || string.IsNullOrWhiteSpace(_emailSetting.Password))
                 throw new InvalidOperationException("SMTP configuration is incomplete.");
 
-            var smtpClient = new SmtpClient(smtpHost)
-            {
-                Port = smtpPort,
-                Credentials = new NetworkCredential(smtpUsername, smtpPassword),
-                EnableSsl = true,
-            };
 
             var mailMessage = new MailMessage
             {
-                From = new MailAddress(smtpUsername),
+                From = new MailAddress(_emailSetting.Username),
                 Subject = subject,
                 Body = body,
                 IsBodyHtml = isBodyHtml,
             };
             mailMessage.To.Add(toEmail);
 
-            await smtpClient.SendMailAsync(mailMessage);
+            await _smtpClient.SendMailAsync(mailMessage);
         }
 
         public async Task<bool> SendActivationEmailAsync(string userName, string toEmail, string linkActivate, DateTime expiryDate)
