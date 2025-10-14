@@ -1,5 +1,10 @@
 ﻿namespace EVServiceCenterMaintenanceAPI.DTO
 {
+    public class RefreshTokenRequestDto
+    {
+        public string RefreshToken { get; set; } = null!;
+    }
+
     public class RegisterRequestDto
     {
         public string Email { get; set; } = null!;

@@ -1,14 +1,15 @@
-﻿using EVServiceCenterMaintenanceAPI.DAO;
+﻿using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
+using EVServiceCenterMaintenanceAPI.DAO;
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Enums;
 using EVServiceCenterMaintenanceAPI.Models;
 using EVServiceCenterMaintenanceAPI.Services;
+using EVServiceCenterMaintenanceAPI.Utils;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace EVServiceCenterMaintenanceAPI.Controllers
 {
@@ -192,6 +193,61 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to activate account: {ex.Message}"));
             }
         }
+
+        [HttpPost("refresh-token")]
+        public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequestDto refreshTokenDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray());
+                return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+            }
+
+            try
+            {
+                var userId = JwtHelper.GetUserIdFromHttpContext(HttpContext);
+                var user = await _userDao.GetUserByIdAsync(userId);
+                if (user == null || user.Status != UserStatus.Active.ToString())
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "User not found or inactive."));
+
+                var authToken = await _authDao.GetValidTokenByValueAndTypeAsync(refreshTokenDto.RefreshToken, TokenType.Refresh.ToString());
+                if (authToken == null || authToken.UserId != userId)
+                    return BadRequest(new ApiResponse<object>(400, "Bad Request", "Invalid or expired refresh token."));
+
+                var deviceHash = HashDeviceInfo(Request.Headers["User-Agent"].ToString() + HttpContext.Connection.RemoteIpAddress?.ToString());
+                var roles = new List<string> { user.Role };
+                var newAccessToken = GenerateJwtToken(user, roles, deviceHash);
+                var newRefreshTokenResult = GenerateRefreshTokenAsync(user);
+
+                authToken.IsUsed = true;
+                authToken.UpdatedAt = DateTime.UtcNow;
+                await _authDao.UpdateTokenAsync(authToken);
+
+                var newAuthToken = new AuthToken
+                {
+                    UserId = user.UserId,
+                    TokenType = TokenType.Refresh.ToString(),
+                    TokenValue = newRefreshTokenResult.Token,
+                    ExpiresAt = newRefreshTokenResult.ExpiresAt,
+                    CreatedAt = DateTime.UtcNow,
+                    IsUsed = false
+                };
+                await _authDao.CreateTokenAsync(newAuthToken);
+
+                return Ok(new ApiResponse<object>(200, "Success", "Token refreshed successfully.", null, new
+                {
+                    AccessToken = newAccessToken.Token,
+                    RefreshToken = newAuthToken.TokenValue
+                }));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to refresh token: {ex.Message}"));
+            }
+        }
+
+        //Function Helpers
+
         private string HashPassword(string password)
         {
             return BCrypt.Net.BCrypt.HashPassword(password);
