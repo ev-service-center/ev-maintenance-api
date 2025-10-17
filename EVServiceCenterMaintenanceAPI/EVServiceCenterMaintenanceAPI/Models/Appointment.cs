@@ -13,8 +13,6 @@ public partial class Appointment
 
     public int CenterId { get; set; }
 
-    public int ServiceId { get; set; }
-
     public int SlotId { get; set; }
 
     public DateTime AppointmentDate { get; set; }
@@ -35,13 +33,9 @@ public partial class Appointment
 
     public virtual User Customer { get; set; } = null!;
 
-    public virtual ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
-
-    public virtual ICollection<MaintenanceHistory> MaintenanceHistories { get; set; } = new List<MaintenanceHistory>();
-
-    public virtual Service Service { get; set; } = null!;
-
     public virtual AppointmentSlot Slot { get; set; } = null!;
 
     public virtual Vehicle Vehicle { get; set; } = null!;
+
+    public virtual ICollection<WorkOrder> WorkOrders { get; set; } = new List<WorkOrder>();
 }

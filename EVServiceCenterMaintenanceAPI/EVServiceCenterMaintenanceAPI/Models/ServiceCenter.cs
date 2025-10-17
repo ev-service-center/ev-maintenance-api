@@ -28,4 +28,6 @@ public partial class ServiceCenter
     public virtual ICollection<Employee> Employees { get; set; } = new List<Employee>();
 
     public virtual ICollection<Part> Parts { get; set; } = new List<Part>();
+
+    public virtual ICollection<WorkOrder> WorkOrders { get; set; } = new List<WorkOrder>();
 }
