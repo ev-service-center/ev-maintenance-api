@@ -34,4 +34,6 @@ public partial class Vehicle
     public virtual ICollection<MaintenanceHistory> MaintenanceHistories { get; set; } = new List<MaintenanceHistory>();
 
     public virtual ICollection<Reminder> Reminders { get; set; } = new List<Reminder>();
+
+    public virtual ICollection<WorkOrder> WorkOrders { get; set; } = new List<WorkOrder>();
 }

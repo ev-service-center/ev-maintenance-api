@@ -9,7 +9,7 @@ public partial class MaintenanceHistory
 
     public int VehicleId { get; set; }
 
-    public int? AppointmentId { get; set; }
+    public int? WorkOrderId { get; set; }
 
     public DateTime MaintenanceDate { get; set; }
 
@@ -25,9 +25,9 @@ public partial class MaintenanceHistory
 
     public DateTime UpdatedAt { get; set; }
 
-    public virtual Appointment? Appointment { get; set; }
-
     public virtual ICollection<PartUsage> PartUsages { get; set; } = new List<PartUsage>();
 
     public virtual Vehicle Vehicle { get; set; } = null!;
+
+    public virtual WorkOrder? WorkOrder { get; set; }
 }

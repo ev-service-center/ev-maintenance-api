@@ -44,4 +44,6 @@ public partial class User
     public virtual ICollection<Reminder> Reminders { get; set; } = new List<Reminder>();
 
     public virtual ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();
+
+    public virtual ICollection<WorkOrder> WorkOrders { get; set; } = new List<WorkOrder>();
 }
