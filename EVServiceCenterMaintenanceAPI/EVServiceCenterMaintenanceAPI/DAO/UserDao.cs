@@ -6,13 +6,30 @@ namespace EVServiceCenterMaintenanceAPI.DAO
     public class UserDao
     {
         private readonly EvserviceCenterDbContext _context;
-        private readonly IServiceScopeFactory _scopeFactory;
 
-        public UserDao(EvserviceCenterDbContext context, IServiceScopeFactory scopeFactory)
+        public UserDao(EvserviceCenterDbContext context)
         {
             _context = context;
-            _scopeFactory = scopeFactory;
+
         }
+
+        public async Task<User> CreateUserAsync(User user, string password)
+        {
+            try
+            {
+                user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);
+                user.CreatedAt = DateTime.UtcNow;
+                user.UpdatedAt = DateTime.UtcNow;
+                _context.Users.Add(user);
+                await _context.SaveChangesAsync();
+                return user;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("Failed to create user.", ex);
+            }
+        }
+
         public async Task<User> RegisterUserAsync(User user, string password, AuthToken token)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
@@ -40,22 +57,23 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             }
         }
 
+        public async Task<bool> IsEmailExists(string email)
+        {
+            return await _context.Users.AnyAsync(u => u.Email == email);
+        }
+
         public async Task<User?> GetUserByIdAsync(int userId)
         {
-            using var scope = _scopeFactory.CreateScope();
-            var context = scope.ServiceProvider.GetRequiredService<EvserviceCenterDbContext>();
-            return await context.Users
+            return await _context.Users
                 .Include(u => u.Vehicles)
                 .FirstOrDefaultAsync(u => u.UserId == userId);
         }
 
         public async Task<User?> GetUserByEmailAsync(string email)
         {
-            using var scope = _scopeFactory.CreateScope();
-            var context = scope.ServiceProvider.GetRequiredService<EvserviceCenterDbContext>();
-            return await context.Users
+            return await _context.Users
                 .Include(u => u.Vehicles)
-                .FirstOrDefaultAsync(u => u.Email == email);
+                .FirstOrDefaultAsync(u => u.Email == email || u.Username == email);
         }
 
         public async Task<User> UpdateUserAsync(User user, string? newPassword = null)

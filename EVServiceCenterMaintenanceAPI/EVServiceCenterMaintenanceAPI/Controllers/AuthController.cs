@@ -45,8 +45,8 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 
             try
             {
-                var existingUser = await _userDao.GetUserByEmailAsync(registerDto.Email);
-                if (existingUser != null)
+                var existingUser = await _userDao.IsEmailExists(registerDto.Email);
+                if (existingUser)
                     return BadRequest(new ApiResponse<object>(400, "Bad Request", $"Email '{registerDto.Email}' already in use."));
 
                 var user = new User
@@ -134,9 +134,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     AccessToken = accessToken.Token,
                     RefreshToken = authToken.TokenValue,
                     Roles = roles,
-                    Username = user.Email,
-                    FullName = user.FullName,
-                    UserId = user.UserId
+                    user.Username,
+                    user.FullName,
+                    user.UserId
                 }));
             }
             catch (Exception ex)
