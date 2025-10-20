@@ -1,5 +1,6 @@
 using EVServiceCenterMaintenanceAPI.DAO;
 using EVServiceCenterMaintenanceAPI.DTO;
+using EVServiceCenterMaintenanceAPI.Extensions;
 using EVServiceCenterMaintenanceAPI.Models;
 using EVServiceCenterMaintenanceAPI.Services;
 using EVServiceCenterMaintenanceAPI.Utils;
@@ -133,6 +134,12 @@ builder.Services.AddAuthorization(options =>
 
 
 var app = builder.Build();
+
+//Seed Admin user on startup
+using (var scope = app.Services.CreateScope())
+{
+    await DatabaseSeeder.SeedAdminUserAsync(scope.ServiceProvider);
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
