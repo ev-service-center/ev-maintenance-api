@@ -53,7 +53,6 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 {
                     Username = registerDto.Email.Split('@')[0],
                     Email = registerDto.Email,
-                    PasswordHash = HashPassword(registerDto.Password),
                     FullName = registerDto.FullName,
                     Role = UserRole.Customer.ToString(),
                     Status = UserStatus.Pending.ToString(),
@@ -100,49 +99,13 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequestDto loginDto)
         {
-            if (!ModelState.IsValid)
-            {
-                var errors = ModelState.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray());
-                return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
-            }
+            return await LoginInternal(loginDto);
+        }
 
-            try
-            {
-                var user = await _userDao.GetUserByEmailAsync(loginDto.Email);
-                if (user == null || !VerifyPassword(loginDto.Password, user.PasswordHash))
-                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid email or password."));
-
-                if (user.Status != UserStatus.Active.ToString())
-                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Account is not active. Please activate your account."));
-
-                var deviceHash = HashDeviceInfo(Request.Headers["User-Agent"].ToString() + HttpContext.Connection.RemoteIpAddress?.ToString());
-                var roles = new List<string> { user.Role };
-                var accessToken = GenerateJwtToken(user, roles, deviceHash);
-                var refreshTokenResult = GenerateRefreshTokenAsync(user);
-
-                var authToken = new AuthToken
-                {
-                    UserId = user.UserId,
-                    TokenType = TokenType.Refresh.ToString(),
-                    TokenValue = refreshTokenResult.Token,
-                    ExpiresAt = refreshTokenResult.ExpiresAt
-                };
-                await _authDao.CreateTokenAsync(authToken);
-
-                return Ok(new ApiResponse<object>(200, "Success", "Login successful.", null, new
-                {
-                    AccessToken = accessToken.Token,
-                    RefreshToken = authToken.TokenValue,
-                    Roles = roles,
-                    user.Username,
-                    user.FullName,
-                    user.UserId
-                }));
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to login: {ex.Message}"));
-            }
+        [HttpPost("login/admin")]
+        public async Task<IActionResult> LoginAdmin([FromBody] LoginRequestDto loginDto)
+        {
+            return await LoginInternal(loginDto, requireAdmin: true);
         }
 
         [HttpPost("activate")]
@@ -248,12 +211,65 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 
         //Function Helpers
 
-        private string HashPassword(string password)
+        //private string HashPassword(string password)
+        //{
+        //    return BCrypt.Net.BCrypt.HashPassword(password);
+        //}
+
+        private async Task<IActionResult> LoginInternal(LoginRequestDto loginDto, bool requireAdmin = false)
         {
-            return BCrypt.Net.BCrypt.HashPassword(password);
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray());
+                return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+            }
+
+            try
+            {
+                var user = await _userDao.GetUserByEmailAsync(loginDto.Email);
+                if (user == null || !VerifyPassword(loginDto.Password, user.PasswordHash))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid email or password."));
+
+                if (user.Status != UserStatus.Active.ToString())
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Account is not active. Please activate your account."));
+
+                // Check admin role if required
+                if (requireAdmin && user.Role != UserRole.Admin.ToString())
+                    return Unauthorized(new ApiResponse<object>(403, "Forbidden", "Account is not authorized to login here."));
+
+                var deviceHash = HashDeviceInfo(Request.Headers["User-Agent"].ToString() + HttpContext.Connection.RemoteIpAddress?.ToString());
+                var roles = new List<string> { user.Role };
+                var accessToken = GenerateJwtToken(user, roles, deviceHash);
+                var refreshTokenResult = GenerateRefreshTokenAsync(user);
+
+                var authToken = new AuthToken
+                {
+                    UserId = user.UserId,
+                    TokenType = TokenType.Refresh.ToString(),
+                    TokenValue = refreshTokenResult.Token,
+                    ExpiresAt = refreshTokenResult.ExpiresAt,
+                    CreatedAt = DateTime.UtcNow,
+                    IsUsed = false
+                };
+                await _authDao.CreateTokenAsync(authToken);
+
+                return Ok(new ApiResponse<object>(200, "Success", "Login successful.", null, new
+                {
+                    AccessToken = accessToken.Token,
+                    RefreshToken = authToken.TokenValue,
+                    Roles = roles,
+                    Username = user.Email,
+                    user.FullName,
+                    user.UserId
+                }));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to login: {ex.Message}"));
+            }
         }
 
-        private bool VerifyPassword(string password, string hash)
+        private static bool VerifyPassword(string password, string hash)
         {
             return BCrypt.Net.BCrypt.Verify(password, hash);
         }
@@ -289,7 +305,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             };
         }
 
-        private JwtTokenResult GenerateActivationToken()
+        private static JwtTokenResult GenerateActivationToken()
         {
             var randomBytes = new byte[64];
             using var rng = RandomNumberGenerator.Create();
@@ -309,7 +325,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             return new JwtTokenResult { Token = refreshToken, ExpiresAt = expires };
         }
 
-        private string HashDeviceInfo(string info)
+        private static string HashDeviceInfo(string info)
         {
             using var sha256 = SHA256.Create();
             var bytes = Encoding.UTF8.GetBytes(info ?? "");
