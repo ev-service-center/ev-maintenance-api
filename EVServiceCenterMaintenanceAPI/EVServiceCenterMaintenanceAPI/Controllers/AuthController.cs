@@ -73,7 +73,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 
                 var createdUser = await _userDao.RegisterUserAsync(user, registerDto.Password, authToken);
 
-                var appUrl = _configuration["url"];
+                var appUrl = _configuration["AppUrl"];
                 var url = string.IsNullOrEmpty(appUrl) ? "https://localhost:3000" : appUrl;
                 var activationLink = $"{url}/account/activate?userId={createdUser.UserId}&token={Uri.EscapeDataString(authToken.TokenValue)}";
                 var emailSent = await _emailService.SendActivationEmailAsync(user.FullName, user.Email, activationLink, authToken.ExpiresAt);
@@ -230,8 +230,14 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 if (user == null || !VerifyPassword(loginDto.Password, user.PasswordHash))
                     return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid email or password."));
 
-                if (user.Status != UserStatus.Active.ToString())
-                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Account is not active. Please activate your account."));
+                if (user.Status.Equals(UserStatus.Pending.ToString(), StringComparison.OrdinalIgnoreCase))
+                    return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<object>(403, "Forbidden", "Account is pending activation. Please check your email or contact support."));
+                if (user.Status.Equals(UserStatus.Inactive.ToString(), StringComparison.OrdinalIgnoreCase))
+                    return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<object>(403, "Forbidden", "Account is inactive. Please contact support."));
+                if (user.Status.Equals(UserStatus.Suspended.ToString(), StringComparison.OrdinalIgnoreCase))
+                    return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<object>(403, "Forbidden", "Account is suspended. Please contact support."));
+                if (user.Status.Equals(UserStatus.Deleted.ToString(), StringComparison.OrdinalIgnoreCase))
+                    return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<object>(403, "Forbidden", "Account is deleted. Please contact support."));
 
                 // Check admin role if required
                 if (requireAdmin && user.Role != UserRole.Admin.ToString())
