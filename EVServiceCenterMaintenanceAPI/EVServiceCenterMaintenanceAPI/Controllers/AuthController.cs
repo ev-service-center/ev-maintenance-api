@@ -209,6 +209,36 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             }
         }
 
+        [HttpPost("check-otp-forget-password")]
+        public async Task<IActionResult> CheckOtpForgetPassword([FromBody] CheckOtpPasswordRequestDto resetPasswordDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray());
+                return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+            }
+
+            try
+            {
+                if (!IsValidEmail(resetPasswordDto.Email))
+                    return BadRequest(new ApiResponse<object>(400, "Bad Request", "Invalid email format."));
+
+                var user = await _userDao.GetUserByEmailAsync(resetPasswordDto.Email);
+                if (user == null)
+                    return NotFound(new ApiResponse<object>(404, "Not Found", "User not found."));
+
+                var otpToken = await _authDao.GetValidTokenByValueAndTypeAsync(resetPasswordDto.Otp, TokenType.OTP.ToString());
+                if (otpToken == null || otpToken.UserId != user.UserId)
+                    return BadRequest(new ApiResponse<object>(400, "Bad Request", "Invalid or expired OTP."));
+
+                return Ok(new ApiResponse<object>(200, "Success", "OTP verified successfully."));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to verify OTP: {ex.Message}"));
+            }
+        }
+
         //Function Helpers
 
         //private string HashPassword(string password)
@@ -337,6 +367,19 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             var bytes = Encoding.UTF8.GetBytes(info ?? "");
             var hashBytes = sha256.ComputeHash(bytes);
             return Convert.ToBase64String(hashBytes);
+        }
+
+        private static bool IsValidEmail(string email)
+        {
+            try
+            {
+                var addr = new System.Net.Mail.MailAddress(email);
+                return addr.Address == email;
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
     public class JwtTokenResult
