@@ -38,6 +38,26 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     return BadRequest(new ApiResponse<object>(400, "BadRequest", "Invalid input data."));
                 }
 
+                // Check if username or email already exists
+                bool isUsernameExists = await _userDao.IsEmailOrUsernameExists(userDto.Username);
+                bool isEmailExists = await _userDao.IsEmailOrUsernameExists(userDto.Email);
+
+                if (isUsernameExists)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Username already exists."));
+                }
+
+                if (isEmailExists)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Email already exists."));
+                }
+
+                // Validate role
+                if (!Enum.IsDefined(typeof(UserRole), userDto.Role))
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Invalid role."));
+                }
+
                 var randomPassword = GenerateRandomPassword();
                 var user = new User
                 {
