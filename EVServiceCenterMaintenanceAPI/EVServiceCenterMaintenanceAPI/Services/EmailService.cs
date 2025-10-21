@@ -59,5 +59,21 @@ namespace EVServiceCenterMaintenanceAPI.Services
                 return false;
             }
         }
+
+        public async Task<bool> SendUserCreatedEmailAsync(UserResponseDto user, string password, string recipientEmail)
+        {
+
+            try
+            {
+                var emailTemplate = EmailTemplate.GenerateUserCreatedEmailTemplate(user, password);
+                await SendEmailAsync(recipientEmail, "Thông báo tạo tài khoản mới", emailTemplate);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
     }
 }
