@@ -1,12 +1,13 @@
-﻿using EVServiceCenterMaintenanceAPI.DAO;
+﻿using System.Security.Cryptography;
+using EVServiceCenterMaintenanceAPI.DAO;
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Enums;
 using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Params;
 using EVServiceCenterMaintenanceAPI.Services;
 using EVServiceCenterMaintenanceAPI.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Cryptography;
 
 namespace EVServiceCenterMaintenanceAPI.Controllers
 {
@@ -100,6 +101,63 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 };
 
                 return Ok(new ApiResponse<UserResponseDto>(200, "Success", "User retrieved successfully.", data: userDto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpGet]
+        [Authorize(Roles = "Staff,Admin")]
+        public async Task<IActionResult> GetAllUsers([FromQuery] UserQueryParams queryParams)
+        {
+            try
+            {
+                //tuple type
+                var (users, total) = await _userDao.GetAllUsersAsync(queryParams);
+
+                var userDtos = users.Select(u => new UserResponseDto
+                {
+                    UserId = u.UserId,
+                    Username = u.Username,
+                    FullName = u.FullName,
+                    Email = u.Email,
+                    Phone = u.Phone,
+                    Role = Enum.Parse<UserRole>(u.Role),
+                    Status = Enum.Parse<UserStatus>(u.Status),
+                    Avatar = UrlHelper.ToAbsoluteUrl(HttpContext, u.Avatar ?? DefaultAvatar.Local),
+                    CreatedAt = u.CreatedAt,
+                    UpdatedAt = u.UpdatedAt
+                }).ToList();
+
+                var responseData = new { users = userDtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
+                return Ok(new ApiResponse<object>(200, "Success", "Users retrieved successfully.", data: responseData));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> DeleteUser(int id)
+        {
+            try
+            {
+                var user = await _userDao.GetUserByIdAsync(id);
+                if (user == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "User not found."));
+
+                var success = await _userDao.DeleteUserAsync(id);
+                if (!success)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "User not found."));
+
+                if (!string.IsNullOrEmpty(user.Avatar))
+                    _imageService.DeleteImage(user.Avatar);
+
+                return NoContent();
             }
             catch (Exception ex)
             {
