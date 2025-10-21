@@ -23,4 +23,10 @@
         public int UserId { get; set; }
         public string Token { get; set; } = null!;
     }
+
+    public class CheckOtpPasswordRequestDto
+    {
+        public string Email { get; set; } = null!;
+        public string Otp { get; set; } = null!;
+    }
 }
