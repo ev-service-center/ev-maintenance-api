@@ -150,7 +150,7 @@ namespace EVServiceCenterMaintenanceAPI.Utils
             </div>
             <div class='security-notice'>
                 <h3>Thông báo bảo mật</h3>
-                <p>Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này và liên hệ với đội ngũ hỗ trợ của chúng tôi tại <a href='mailto:3docorp@gmail.com'>3docorp@gmail.com</a>.</p>
+                <p>Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này và liên hệ với đội ngũ hỗ trợ của chúng tôi tại <a href='mailto:nvkhang0099@gmail.com'>nvkhang0099@gmail.com</a>.</p>
             </div>
         </div>
         <div class='footer'>
@@ -164,6 +164,96 @@ namespace EVServiceCenterMaintenanceAPI.Utils
 </html>";
         }
 
+        public static string GenerateUserCreatedEmailTemplate(UserResponseDto user, string password)
+        {
+            string fullName = user.FullName;
+            string username = user.Username;
+            string email = user.Email ?? "N/A";
+            string phone = user.Phone ?? "N/A";
+            string role = user.Role.ToString();
+            string status = user.Status.ToString();
+            string createdAt = user.CreatedAt.ToString("dd/MM/yyyy HH:mm");
 
+            return @"
+<!DOCTYPE html>
+<html lang='vi'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Thông báo tạo tài khoản</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; background: #f4f7fa; padding: 20px; }
+        .email-container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1); overflow: hidden; }
+        .header { background: linear-gradient(135deg, #007bff, #00c4cc); padding: 30px; text-align: center; position: relative; }
+        .header img { width: 100px; height: auto; margin-bottom: 15px; }
+        .header h1 { color: #ffffff; font-size: 24px; font-weight: 600; margin-bottom: 10px; }
+        .header p { color: rgba(255, 255, 255, 0.9); font-size: 14px; }
+        .content { padding: 40px; text-align: center; }
+        .greeting { font-size: 18px; color: #1a2b49; margin-bottom: 20px; font-weight: 600; }
+        .message { font-size: 15px; color: #4a5b6c; margin-bottom: 30px; line-height: 1.7; }
+        .user-details { margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px; text-align: left; }
+        .user-details h3 { color: #1a2b49; font-size: 16px; margin-bottom: 10px; font-weight: 600; }
+        .user-details p { color: #4a5b6c; font-size: 14px; margin-bottom: 8px; }
+        .expiry-info { margin-top: 20px; padding: 15px; background: #fff8e1; border-left: 4px solid #ffca28; border-radius: 8px; text-align: left; }
+        .expiry-info h3 { color: #e65100; font-size: 14px; margin-bottom: 8px; font-weight: 600; }
+        .expiry-info p { color: #4a5b6c; font-size: 13px; }
+        .security-notice { margin: 20px 0; padding: 15px; background: #ffebee; border-left: 4px solid #d32f2f; border-radius: 8px; text-align: left; }
+        .security-notice h3 { color: #b71c1c; font-size: 14px; margin-bottom: 8px; font-weight: 600; }
+        .security-notice p { color: #4a5b6c; font-size: 13px; }
+        .footer { background: #f8f9fa; padding: 30px; text-align: center; border-top: 1px solid #e0e4e8; }
+        .footer-brand { font-size: 18px; font-weight: 700; color: #007bff; margin-bottom: 10px; }
+        .footer p { color: #6c757d; font-size: 12px; margin-bottom: 8px; }
+        .footer a { color: #007bff; text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+        @media (max-width: 600px) {
+            .email-container { margin: 10px; border-radius: 8px; }
+            .header { padding: 20px; }
+            .content { padding: 20px; }
+            .header img { width: 80px; }
+            .header h1 { font-size: 20px; }
+            .action-button { padding: 10px 20px; font-size: 14px; }
+            .footer { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <div class='email-container'>
+        <div class='header'>
+            <img src='https://res.cloudinary.com/dphys6egj/image/upload/v1759812317/Pngtree_hipster_bike_electric_logo_design_4847419_wvci4k.jpg' alt='Logo EV Maintenance'>
+            <h1>Chào mừng đến với EV Service Center!</h1>
+            <p>Thông báo tạo tài khoản</p>
+        </div>
+        <div class='content'>
+            <div class='greeting'>Xin chào, " + fullName + @"!</div>
+            <div class='message'>
+                Tài khoản của bạn đã được tạo thành công. Dưới đây là thông tin đăng nhập và chi tiết tài khoản của bạn. Vui lòng đổi mật khẩu sau khi đăng nhập lần đầu.
+            </div>
+            <div class='user-details'>
+                <h3>Thông tin tài khoản</h3>
+                <p><strong>Tên người dùng:</strong> " + username + @"</p>
+                <p><strong>Mật khẩu tạm thời:</strong> " + password + @"</p>
+                <p><strong>Họ và tên:</strong> " + fullName + @"</p>
+                <p><strong>Email:</strong> " + email + @"</p>
+                <p><strong>Số điện thoại:</strong> " + phone + @"</p>
+                <p><strong>Vai trò:</strong> " + role + @"</p>
+                <p><strong>Trạng thái:</strong> " + status + @"</p>
+                <p><strong>Ngày tạo:</strong> " + createdAt + @"</p>
+            </div>
+            <div class='security-notice'>
+                <h3>Thông báo bảo mật</h3>
+                <p>Đây là mật khẩu tạm thời. Vui lòng đăng nhập và đổi mật khẩu ngay lập tức. Nếu bạn không yêu cầu tạo tài khoản này, vui lòng liên hệ với đội ngũ hỗ trợ của chúng tôi tại <a href='mailto:nvkhang0099@gmail.com'>nvkhang0099@gmail.com</a>.</p>
+            </div>
+        </div>
+        <div class='footer'>
+            <div class='footer-brand'>EV Service Center</div>
+            <p>Tra Vinh, Viet Nam</p>
+            <p>Email: <a href='mailto:nvkhang0099@gmail.com'>nvkhang0099@gmail.com</a> | Điện thoại: 0338302160</p>
+            <p>© 2025 EV Service Center. Tất cả quyền được bảo lưu.</p>
+        </div>
+    </div>
+</body>
+</html>";
+        }
     }
 }

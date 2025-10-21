@@ -72,6 +72,8 @@ builder.Services.AddScoped<UserDao>();
 builder.Services.AddScoped<AuthDao>();
 builder.Services.AddScoped<EmailService>();
 builder.Services.Configure<EmailSetting>(builder.Configuration.GetSection("EmailSettings"));
+builder.Services.AddScoped<ImageService>();
+
 
 // Configure Authentication
 builder.Services.AddAuthentication(options =>
@@ -131,13 +133,15 @@ builder.Services.AddAuthentication(options =>
 });
 
 // Configure Authorization
-builder.Services.AddAuthorization(options =>
-{
-    options.AddPolicy("Admin", policy => policy.RequireRole("Admin"));
-    options.AddPolicy("Customer", policy => policy.RequireRole("Customer"));
-    options.AddPolicy("Staff", policy => policy.RequireRole("Staff"));
-    options.AddPolicy("Technician", policy => policy.RequireRole("Technician"));
-});
+builder.Services.AddAuthorizationBuilder()
+                              // Configure Authorization
+                              .AddPolicy("Admin", policy => policy.RequireRole("Admin"))
+                              // Configure Authorization
+                              .AddPolicy("Customer", policy => policy.RequireRole("Customer"))
+                              // Configure Authorization
+                              .AddPolicy("Staff", policy => policy.RequireRole("Staff"))
+                              // Configure Authorization
+                              .AddPolicy("Technician", policy => policy.RequireRole("Technician"));
 
 
 var app = builder.Build();
@@ -154,6 +158,14 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "EV Service Center Maintenance API v1"));
 }
+
+//Ensure exist wwwroot
+var webRootPath = app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+if(!Directory.Exists(webRootPath))
+{
+    Directory.CreateDirectory(webRootPath);
+}
+
 app.UseStaticFiles();
 
 app.UseCors();
