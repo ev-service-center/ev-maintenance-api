@@ -45,7 +45,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 
             try
             {
-                var existingUser = await _userDao.IsEmailExists(registerDto.Email);
+                var existingUser = await _userDao.IsEmailOrUsernameExists(registerDto.Email);
                 if (existingUser)
                     return BadRequest(new ApiResponse<object>(400, "Bad Request", $"Email '{registerDto.Email}' already in use."));
 

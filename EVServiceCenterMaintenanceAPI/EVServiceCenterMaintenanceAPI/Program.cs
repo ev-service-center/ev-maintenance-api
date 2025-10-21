@@ -20,7 +20,7 @@ builder.Services.AddControllers().AddJsonOptions(configure =>
     configure.JsonSerializerOptions.PropertyNamingPolicy = null;
     configure.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     configure.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
-}); 
+});
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
@@ -161,7 +161,7 @@ if (app.Environment.IsDevelopment())
 
 //Ensure exist wwwroot
 var webRootPath = app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
-if(!Directory.Exists(webRootPath))
+if (!Directory.Exists(webRootPath))
 {
     Directory.CreateDirectory(webRootPath);
 }
