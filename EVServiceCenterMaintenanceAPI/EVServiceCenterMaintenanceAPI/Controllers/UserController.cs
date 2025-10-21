@@ -160,6 +160,94 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             }
         }
 
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Admin")]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> UpdateUser(int id, [FromForm] UserUpdateRequestDto userDto)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Invalid input data."));
+                }
+
+                var existingUser = await _userDao.GetUserByIdAsync(id);
+                if (existingUser == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "User not found."));
+
+                // Check if email is being changed and if new email already exists
+                if (userDto.Email != null && existingUser.Email != userDto.Email)
+                {
+                    bool isEmailExists = await _userDao.IsEmailOrUsernameExists(userDto.Email);
+                    if (isEmailExists)
+                    {
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", "Email already exists."));
+                    }
+                }
+
+                if (userDto.Role.HasValue && !Enum.IsDefined(typeof(UserRole), userDto.Role.Value))
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Invalid role."));
+                }
+
+                if (userDto.Status.HasValue && !Enum.IsDefined(typeof(UserStatus), userDto.Status.Value))
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Invalid status."));
+                }
+
+                string? oldAvatarPath = existingUser.Avatar;
+
+                if (userDto.FullName != null)
+                    existingUser.FullName = userDto.FullName;
+
+                if (userDto.Email != null)
+                    existingUser.Email = userDto.Email;
+
+                if (userDto.Phone != null)
+                    existingUser.Phone = userDto.Phone;
+
+                if (userDto.Role.HasValue)
+                    existingUser.Role = userDto.Role.Value.ToString();
+
+                if (userDto.Status.HasValue)
+                    existingUser.Status = userDto.Status.Value.ToString();
+
+                if (userDto.Avatar != null)
+                    existingUser.Avatar = await _imageService.SaveImageAsync(userDto.Avatar);
+
+                existingUser.UpdatedAt = DateTime.UtcNow;
+
+                var updatedUser = await _userDao.UpdateUserAsync(existingUser);
+                var updatedUserDto = new UserResponseDto
+                {
+                    UserId = updatedUser.UserId,
+                    Username = updatedUser.Username,
+                    FullName = updatedUser.FullName,
+                    Email = updatedUser.Email,
+                    Phone = updatedUser.Phone,
+                    Role = Enum.Parse<UserRole>(updatedUser.Role),
+                    Status = Enum.Parse<UserStatus>(updatedUser.Status),
+                    Avatar = UrlHelper.ToAbsoluteUrl(HttpContext, updatedUser.Avatar ?? DefaultAvatar.Local),
+                    CreatedAt = updatedUser.CreatedAt,
+                    UpdatedAt = updatedUser.UpdatedAt
+                };
+
+                // Delete old avatar
+                if (userDto.Avatar != null && !string.IsNullOrEmpty(oldAvatarPath)
+                    && oldAvatarPath != DefaultAvatar.Local)
+                {
+                    _imageService.DeleteImage(oldAvatarPath);
+                }
+
+                return Ok(new ApiResponse<UserResponseDto>(200, "Success", "User updated successfully.", data: updatedUserDto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
         [HttpDelete("{id}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> DeleteUser(int id)

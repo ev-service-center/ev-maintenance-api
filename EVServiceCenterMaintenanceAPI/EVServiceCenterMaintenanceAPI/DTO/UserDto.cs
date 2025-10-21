@@ -13,6 +13,16 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         public IFormFile? Avatar { get; set; }
     }
 
+    public class UserUpdateRequestDto
+    {
+        [StringLength(100)] public string? FullName { get; set; }
+        [EmailAddress, StringLength(100)] public string? Email { get; set; }
+        [StringLength(20)] public string? Phone { get; set; }
+        public UserRole? Role { get; set; }
+        public UserStatus? Status { get; set; }
+        public IFormFile? Avatar { get; set; }
+    }
+
     public class UserResponseDto
     {
         public int UserId { get; set; }
