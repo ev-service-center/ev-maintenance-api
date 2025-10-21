@@ -73,7 +73,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 
                 var createdUser = await _userDao.RegisterUserAsync(user, registerDto.Password, authToken);
 
-                var appUrl = _configuration["url"];
+                var appUrl = _configuration["AppUrl"];
                 var url = string.IsNullOrEmpty(appUrl) ? "https://localhost:3000" : appUrl;
                 var activationLink = $"{url}/account/activate?userId={createdUser.UserId}&token={Uri.EscapeDataString(authToken.TokenValue)}";
                 var emailSent = await _emailService.SendActivationEmailAsync(user.FullName, user.Email, activationLink, authToken.ExpiresAt);
@@ -88,7 +88,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     "Created",
                     "Registration successful! Please check your email to activate your account within 24 hours.",
                     null,
-                    new { UserId = createdUser.UserId, Message = "Registration successful.", ActivationRequired = true, ExpiresIn = "24 hours" }));
+                    new { createdUser.UserId, Message = "Registration successful.", ActivationRequired = true, ExpiresIn = "24 hours" }));
             }
             catch (Exception ex)
             {
@@ -127,14 +127,14 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     return NotFound(new ApiResponse<object>(404, "Not Found", "User not found."));
 
                 if (user.Status == UserStatus.Active.ToString())
-                    return Ok(new ApiResponse<object>(200, "Success", "Account already activated."));
+                    return Conflict(new ApiResponse<object>(409, "Conflict", "Account already activated."));
 
                 if (user.Status != UserStatus.Pending.ToString())
-                    return BadRequest(new ApiResponse<object>(400, "Bad Request", "Account is not in pending state."));
+                    return Conflict(new ApiResponse<object>(40, "Conflict", "Account is not in pending state."));
 
                 var activationToken = await _authDao.GetValidTokenByValueAndTypeAsync(activateDto.Token, TokenType.Activation.ToString());
                 if (activationToken == null || activationToken.UserId != user.UserId)
-                    return BadRequest(new ApiResponse<object>(400, "Bad Request", "Invalid or expired activation token."));
+                    return NotFound(new ApiResponse<object>(404, "Not Found", "Invalid or expired activation token."));
 
                 user.Status = UserStatus.Active.ToString();
                 user.UpdatedAt = DateTime.UtcNow;
@@ -146,8 +146,8 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return Ok(new ApiResponse<object>(200, "Success", "Account activated successfully!", null, new
                 {
                     Message = "Account activated successfully",
-                    UserId = user.UserId,
-                    Email = user.Email,
+                    user.UserId,
+                    user.Email,
                     Status = "active"
                 }));
             }
@@ -230,8 +230,14 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 if (user == null || !VerifyPassword(loginDto.Password, user.PasswordHash))
                     return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid email or password."));
 
-                if (user.Status != UserStatus.Active.ToString())
-                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Account is not active. Please activate your account."));
+                if (user.Status.Equals(UserStatus.Pending.ToString(), StringComparison.OrdinalIgnoreCase))
+                    return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<object>(403, "Forbidden", "Account is pending activation. Please check your email or contact support."));
+                if (user.Status.Equals(UserStatus.Inactive.ToString(), StringComparison.OrdinalIgnoreCase))
+                    return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<object>(403, "Forbidden", "Account is inactive. Please contact support."));
+                if (user.Status.Equals(UserStatus.Suspended.ToString(), StringComparison.OrdinalIgnoreCase))
+                    return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<object>(403, "Forbidden", "Account is suspended. Please contact support."));
+                if (user.Status.Equals(UserStatus.Deleted.ToString(), StringComparison.OrdinalIgnoreCase))
+                    return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<object>(403, "Forbidden", "Account is deleted. Please contact support."));
 
                 // Check admin role if required
                 if (requireAdmin && user.Role != UserRole.Admin.ToString())

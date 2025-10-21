@@ -13,7 +13,8 @@
         Pending,
         Active,
         Inactive,
-        Suspended
+        Suspended,
+        Deleted
     }
 
     public enum TokenType
