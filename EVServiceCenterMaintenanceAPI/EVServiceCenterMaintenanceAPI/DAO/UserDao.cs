@@ -1,4 +1,5 @@
 ﻿using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.EntityFrameworkCore;
 
 namespace EVServiceCenterMaintenanceAPI.DAO
@@ -105,9 +106,60 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             }
         }
 
+        public async Task<(List<User> Users, int Total)> GetAllUsersAsync(UserQueryParams queryParams)
+        {
+            var validation = queryParams.Validate();
+            if (!validation.IsValid)
+            {
+                throw new ArgumentException(validation.ErrorMessage);
+            }
+
+            var query = _context.Users.AsQueryable();
+            if (!string.IsNullOrEmpty(queryParams.Search))
+                query = query.Where(u => u.Username.Contains(queryParams.Search) || u.FullName.Contains(queryParams.Search) || u.Email.Contains(queryParams.Search));
+            if (queryParams.Role.HasValue)
+                query = query.Where(u => u.Role == queryParams.Role.ToString());
+            if (queryParams.StatusUser.HasValue)
+                query = query.Where(u => u.Status == queryParams.StatusUser.ToString());
+            if (queryParams.FromDate.HasValue)
+                query = query.Where(u => u.CreatedAt >= queryParams.FromDate.Value);
+            if (queryParams.ToDate.HasValue)
+                query = query.Where(u => u.CreatedAt <= queryParams.ToDate.Value);
+
+            if (!string.IsNullOrEmpty(queryParams.SortBy))
+            {
+                bool isAscending = queryParams.SortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase);
+                switch (queryParams.SortBy.ToLower())
+                {
+                    case "username":
+                        query = isAscending ? query.OrderBy(u => u.Username) : query.OrderByDescending(u => u.Username);
+                        break;
+                    case "fullname":
+                        query = isAscending ? query.OrderBy(u => u.FullName) : query.OrderByDescending(u => u.FullName);
+                        break;
+                    case "email":
+                        query = isAscending ? query.OrderBy(u => u.Email) : query.OrderByDescending(u => u.Email);
+                        break;
+                    case "createdat":
+                        query = isAscending ? query.OrderBy(u => u.CreatedAt) : query.OrderByDescending(u => u.CreatedAt);
+                        break;
+                    default:
+                        query = isAscending ? query.OrderBy(u => u.UserId) : query.OrderByDescending(u => u.UserId);
+                        break;
+                }
+            }
+
+            var total = await query.CountAsync();
+            var users = await query
+                .Skip((queryParams.Page - 1) * queryParams.PageSize)
+                .Take(queryParams.PageSize)
+                .ToListAsync();
+
+            return (users, total);
+        }
+
         public async Task<bool> DeleteUserAsync(int userId)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
                 var user = await _context.Users.FindAsync(userId);
@@ -116,14 +168,13 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
                 _context.Users.Remove(user);
                 await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
                 return true;
             }
             catch (Exception ex)
             {
-                await transaction.RollbackAsync();
                 throw new Exception($"Failed to delete user with ID {userId}.", ex);
             }
         }
+
     }
 }
