@@ -407,6 +407,36 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             }
         }
 
+        [HttpGet("role/{role}")]
+        [Authorize(Roles = "Staff,Admin")]
+        public async Task<IActionResult> GetUsersByRole(string role)
+        {
+            try
+            {
+                var roleEnum = Enum.Parse<UserRole>(role, true);
+                var users = await _userDao.GetUsersByRoleAsync(roleEnum);
+                var dtos = users.Select(u => new UserResponseDto
+                {
+                    UserId = u.UserId,
+                    Username = u.Username,
+                    FullName = u.FullName,
+                    Email = u.Email,
+                    Phone = u.Phone,
+                    Role = Enum.Parse<UserRole>(u.Role),
+                    Status = Enum.Parse<UserStatus>(u.Status),
+                    Avatar = u.Avatar,
+                    CreatedAt = u.CreatedAt,
+                    UpdatedAt = u.UpdatedAt
+                }).ToList();
+
+                return Ok(new ApiResponse<List<UserResponseDto>>(200, "Success", "Users retrieved successfully.", data: dtos));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
         //Helper Function
         private static string GenerateRandomPassword(int length = 12)
         {
@@ -423,3 +453,4 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         }
     }
 }
+
