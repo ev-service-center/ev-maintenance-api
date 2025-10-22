@@ -70,7 +70,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     FullName = userDto.FullName,
                     Email = userDto.Email,
                     Phone = userDto.Phone,
-                    Role = userDto.Role.Value.ToString(),
+                    Role = userDto.Role!.Value.ToString(),
                     Status = UserStatus.Active.ToString(),
                     Avatar = userDto.Avatar != null ? await _imageService.SaveImageAsync(userDto.Avatar) : DefaultAvatar.Local,
                 };
@@ -253,6 +253,96 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to update user: {ex.Message}"));
+            }
+        }
+
+        [HttpPut("profile")]
+        [Authorize]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> UpdateProfile([FromForm] UserProfileUpdateRequestDto userDto)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState
+                        .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
+                    return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+                }
+
+                var userId = JwtHelper.GetUserIdFromHttpContext(HttpContext);
+
+                var existingUser = await _userDao.GetUserByIdAsync(userId);
+                if (existingUser == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "User not found."));
+
+                // Check if username is being changed and if new username already exists
+                if (userDto.Username != null && existingUser.Username != userDto.Username)
+                {
+                    bool isUsernameExists = await _userDao.IsUsernameExistsAsync(userDto.Username);
+                    if (isUsernameExists)
+                    {
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", "Username already exists."));
+                    }
+                }
+
+                // Check if email is being changed and if new email already exists
+                if (userDto.Email != null && existingUser.Email != userDto.Email)
+                {
+                    bool isEmailExists = await _userDao.IsEmailExistsAsync(userDto.Email);
+                    if (isEmailExists)
+                    {
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", "Email already exists."));
+                    }
+                }
+
+                string? oldAvatarPath = existingUser.Avatar;
+
+                if (userDto.Username != null)
+                    existingUser.Username = userDto.Username;
+
+                if (userDto.FullName != null)
+                    existingUser.FullName = userDto.FullName;
+
+                if (userDto.Email != null)
+                    existingUser.Email = userDto.Email;
+
+                if (userDto.Phone != null)
+                    existingUser.Phone = userDto.Phone;
+
+                if (userDto.Avatar != null)
+                    existingUser.Avatar = await _imageService.SaveImageAsync(userDto.Avatar);
+
+                existingUser.UpdatedAt = DateTime.UtcNow;
+
+                var updatedUser = await _userDao.UpdateUserAsync(existingUser);
+                var updatedUserDto = new UserResponseDto
+                {
+                    UserId = updatedUser.UserId,
+                    Username = updatedUser.Username,
+                    FullName = updatedUser.FullName,
+                    Email = updatedUser.Email,
+                    Phone = updatedUser.Phone,
+                    Role = Enum.Parse<UserRole>(updatedUser.Role),
+                    Status = Enum.Parse<UserStatus>(updatedUser.Status),
+                    Avatar = UrlHelper.ToAbsoluteUrl(HttpContext, updatedUser.Avatar ?? DefaultAvatar.Local),
+                    CreatedAt = updatedUser.CreatedAt,
+                    UpdatedAt = updatedUser.UpdatedAt
+                };
+
+                // Delete old avatar
+                if (userDto.Avatar != null && !string.IsNullOrEmpty(oldAvatarPath)
+                    && oldAvatarPath != DefaultAvatar.Local)
+                {
+                    _imageService.DeleteImage(oldAvatarPath);
+                }
+
+                return Ok(new ApiResponse<UserResponseDto>(200, "Success", "Profile updated successfully.", data: updatedUserDto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to update profile: {ex.Message}"));
             }
         }
 

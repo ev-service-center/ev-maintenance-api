@@ -40,6 +40,16 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         public DateTime UpdatedAt { get; set; }
     }
 
+    public class UserProfileUpdateRequestDto
+    {
+        [StringLength(50)] public string? Username { get; set; }
+        [StringLength(100)] public string? FullName { get; set; }
+        [EmailAddress, StringLength(100)] public string? Email { get; set; }
+        [RegularExpression(@"^(\+84|0)[0-9]{9,10}$", ErrorMessage = "Invalid Vietnamese phone number format.")]
+        public string? Phone { get; set; }
+        public IFormFile? Avatar { get; set; }
+    }
+
     public class ChangePasswordRequestDto
     {
         [Required(ErrorMessage = "Old password is required.")]
