@@ -15,7 +15,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
-builder.Services.AddControllers().AddJsonOptions(configure =>
+builder.Services.AddControllers().ConfigureApiBehaviorOptions(configure =>
+{
+    configure.SuppressModelStateInvalidFilter = true;
+}).AddJsonOptions(configure =>
 {
     configure.JsonSerializerOptions.PropertyNamingPolicy = null;
     configure.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());

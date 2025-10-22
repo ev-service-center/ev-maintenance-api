@@ -16,19 +16,12 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
         public async Task<User> CreateUserAsync(User user, string password)
         {
-            try
-            {
-                user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);
-                user.CreatedAt = DateTime.UtcNow;
-                user.UpdatedAt = DateTime.UtcNow;
-                _context.Users.Add(user);
-                await _context.SaveChangesAsync();
-                return user;
-            }
-            catch (Exception ex)
-            {
-                throw new Exception("Failed to create user.", ex);
-            }
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);
+            user.CreatedAt = DateTime.UtcNow;
+            user.UpdatedAt = DateTime.UtcNow;
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+            return user;
         }
 
         public async Task<User> RegisterUserAsync(User user, string password, AuthToken token)
@@ -58,6 +51,16 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             }
         }
 
+        public async Task<bool> IsUsernameExistsAsync(string username)
+        {
+            return await _context.Users.AnyAsync(u => u.Username == username);
+        }
+
+        public async Task<bool> IsEmailExistsAsync(string email)
+        {
+            return await _context.Users.AnyAsync(u => u.Email == email);
+        }
+
         public async Task<bool> IsEmailOrUsernameExists(string emailOrUsername)
         {
             return await _context.Users.AnyAsync(u => u.Email == emailOrUsername || u.Username == emailOrUsername);
@@ -79,31 +82,40 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
         public async Task<User> UpdateUserAsync(User user, string? newPassword = null)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
-            try
-            {
-                var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.UserId == user.UserId);
-                if (existingUser == null)
-                    throw new Exception($"User with ID {user.UserId} not found.");
+            var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.UserId == user.UserId);
+            if (existingUser == null)
+                throw new Exception($"User with ID {user.UserId} not found.");
 
-                existingUser.FullName = user.FullName;
-                existingUser.Email = user.Email;
-                existingUser.Phone = user.Phone;
-                existingUser.Status = user.Status;
-                existingUser.Avatar = user.Avatar;
-                existingUser.UpdatedAt = DateTime.UtcNow;
-                if (!string.IsNullOrEmpty(newPassword))
-                    existingUser.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+            existingUser.FullName = user.FullName;
+            existingUser.Email = user.Email;
+            existingUser.Phone = user.Phone;
+            existingUser.Status = user.Status;
+            existingUser.Avatar = user.Avatar;
+            existingUser.UpdatedAt = DateTime.UtcNow;
+            if (!string.IsNullOrEmpty(newPassword))
+                existingUser.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
 
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
-                return existingUser;
-            }
-            catch (Exception ex)
-            {
-                await transaction.RollbackAsync();
-                throw new Exception($"Failed to update user with ID {user.UserId}.", ex);
-            }
+            await _context.SaveChangesAsync();
+            return existingUser;
+        }
+
+        public async Task<User> UpdatePasswordAsync(int userId, string oldPassword, string newPassword)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            if (user == null)
+                throw new Exception($"User with ID {userId} not found.");
+
+            if (!BCrypt.Net.BCrypt.Verify(oldPassword, user.PasswordHash))
+                throw new UnauthorizedAccessException("Invalid old password.");
+
+            if (oldPassword == newPassword)
+                throw new ArgumentException("New password must be different from old password.");
+
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+            user.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            return user;
         }
 
         public async Task<(List<User> Users, int Total)> GetAllUsersAsync(UserQueryParams queryParams)
@@ -160,20 +172,13 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
         public async Task<bool> DeleteUserAsync(int userId)
         {
-            try
-            {
-                var user = await _context.Users.FindAsync(userId);
-                if (user == null)
-                    return false;
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null)
+                return false;
 
-                _context.Users.Remove(user);
-                await _context.SaveChangesAsync();
-                return true;
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Failed to delete user with ID {userId}.", ex);
-            }
+            _context.Users.Remove(user);
+            await _context.SaveChangesAsync();
+            return true;
         }
 
     }
