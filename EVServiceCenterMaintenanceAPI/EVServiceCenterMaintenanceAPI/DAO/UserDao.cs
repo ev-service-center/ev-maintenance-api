@@ -61,11 +61,6 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             return await _context.Users.AnyAsync(u => u.Email == email);
         }
 
-        public async Task<bool> IsEmailOrUsernameExists(string emailOrUsername)
-        {
-            return await _context.Users.AnyAsync(u => u.Email == emailOrUsername || u.Username == emailOrUsername);
-        }
-
         public async Task<User?> GetUserByIdAsync(int userId)
         {
             return await _context.Users
