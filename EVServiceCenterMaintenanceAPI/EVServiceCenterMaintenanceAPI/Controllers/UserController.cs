@@ -19,11 +19,14 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         private readonly ImageService _imageService;
         private readonly EmailService _emailService;
 
-        public UserController(UserDao userDao, ImageService imageService, EmailService emailService)
+        private readonly AuthDao _authDao;
+
+        public UserController(UserDao userDao, ImageService imageService, EmailService emailService, AuthDao authDao)
         {
             _userDao = userDao;
             _imageService = imageService;
             _emailService = emailService;
+            _authDao = authDao;
         }
 
         [HttpPost]
@@ -35,12 +38,15 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             {
                 if (!ModelState.IsValid)
                 {
-                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Invalid input data."));
+                    var errors = ModelState
+                        .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
+                    return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
                 }
 
                 // Check if username or email already exists
-                bool isUsernameExists = await _userDao.IsEmailOrUsernameExists(userDto.Username);
-                bool isEmailExists = await _userDao.IsEmailOrUsernameExists(userDto.Email);
+                bool isUsernameExists = await _userDao.IsUsernameExistsAsync(userDto.Username);
+                bool isEmailExists = await _userDao.IsEmailExistsAsync(userDto.Email);
 
                 if (isUsernameExists)
                 {
@@ -52,8 +58,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     return BadRequest(new ApiResponse<object>(400, "BadRequest", "Email already exists."));
                 }
 
-                // Validate role
-                if (!Enum.IsDefined(typeof(UserRole), userDto.Role))
+                if (userDto.Role.HasValue && !Enum.IsDefined(typeof(UserRole), userDto.Role.Value))
                 {
                     return BadRequest(new ApiResponse<object>(400, "BadRequest", "Invalid role."));
                 }
@@ -65,7 +70,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     FullName = userDto.FullName,
                     Email = userDto.Email,
                     Phone = userDto.Phone,
-                    Role = userDto.Role.ToString(),
+                    Role = userDto.Role.Value.ToString(),
                     Status = UserStatus.Active.ToString(),
                     Avatar = userDto.Avatar != null ? await _imageService.SaveImageAsync(userDto.Avatar) : DefaultAvatar.Local,
                 };
@@ -92,7 +97,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to create user: {ex.Message}"));
             }
         }
 
@@ -124,7 +129,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to get user: {ex.Message}"));
             }
         }
 
@@ -156,7 +161,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to get users: {ex.Message}"));
             }
         }
 
@@ -169,7 +174,10 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             {
                 if (!ModelState.IsValid)
                 {
-                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Invalid input data."));
+                    var errors = ModelState
+                        .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
+                    return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
                 }
 
                 var existingUser = await _userDao.GetUserByIdAsync(id);
@@ -179,7 +187,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 // Check if email is being changed and if new email already exists
                 if (userDto.Email != null && existingUser.Email != userDto.Email)
                 {
-                    bool isEmailExists = await _userDao.IsEmailOrUsernameExists(userDto.Email);
+                    bool isEmailExists = await _userDao.IsEmailExistsAsync(userDto.Email);
                     if (isEmailExists)
                     {
                         return BadRequest(new ApiResponse<object>(400, "BadRequest", "Email already exists."));
@@ -244,7 +252,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to update user: {ex.Message}"));
             }
         }
 
@@ -269,7 +277,43 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to delete user: {ex.Message}"));
+            }
+        }
+
+        [HttpPost("change-password")]
+        [Authorize]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequestDto changePasswordDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState
+                        .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
+                return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+            }
+
+            try
+            {
+                var userId = JwtHelper.GetUserIdFromHttpContext(HttpContext);
+
+                // Validate password strength
+                var (isValid, errorMessage) = ValidationHelper.ValidatePasswordStrength(changePasswordDto.NewPassword);
+                if (!isValid)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "Bad Request", errorMessage));
+                }
+
+                await _userDao.UpdatePasswordAsync(userId, changePasswordDto.OldPassword, changePasswordDto.NewPassword);
+
+                // Revoke all refresh tokens for security
+                await _authDao.RevokeRefreshTokensByUserIdAsync(userId);
+
+                return Ok(new ApiResponse<object>(200, "Success", "Password changed successfully. Please login again with your new password."));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to change password: {ex.Message}"));
             }
         }
 
@@ -283,7 +327,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             rdb.GetBytes(randomBytes);
             for (int i = 0; i < length; i++)
             {
-                password[i] = validChars[randomBytes[i] % 72];
+                password[i] = validChars[randomBytes[i] % validChars.Length];
             }
             return new string(password);
         }
