@@ -1,25 +1,20 @@
-﻿using System.Net.Mail;
-using System.Net;
+﻿using System.Net;
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Models;
 using EVServiceCenterMaintenanceAPI.Utils;
+using MailKit.Net.Smtp;
+using MailKit.Security;
 using Microsoft.Extensions.Options;
+using MimeKit;
 
 namespace EVServiceCenterMaintenanceAPI.Services
 {
     public class EmailService
     {
         private readonly EmailSetting _emailSetting;
-        private readonly SmtpClient _smtpClient;
         public EmailService(IOptions<EmailSetting> emailSetting)
         {
             _emailSetting = emailSetting.Value;
-            _smtpClient = new SmtpClient(_emailSetting.Server)
-            {
-                Port = _emailSetting.Port,
-                Credentials = new NetworkCredential(_emailSetting.Username, _emailSetting.Password),
-                EnableSsl = true,
-            };
         }
         public async Task SendEmailAsync(string toEmail, string subject, string body, bool isBodyHtml = true)
         {
@@ -33,17 +28,22 @@ namespace EVServiceCenterMaintenanceAPI.Services
             if (string.IsNullOrWhiteSpace(_emailSetting.Server) || _emailSetting.Port == 0 || string.IsNullOrWhiteSpace(_emailSetting.Username) || string.IsNullOrWhiteSpace(_emailSetting.Password))
                 throw new InvalidOperationException("SMTP configuration is incomplete.");
 
+            var message = new MimeMessage();
+            message.From.Add(new MailboxAddress(_emailSetting.Sender ?? "EV Service Center", _emailSetting.Username));
+            message.To.Add(MailboxAddress.Parse(toEmail));
+            message.Subject = subject;
+            var bodyBuilder = new BodyBuilder();
+            if (isBodyHtml)
+                bodyBuilder.HtmlBody = body;
+            else
+                bodyBuilder.TextBody = body;
+            message.Body = bodyBuilder.ToMessageBody();
 
-            var mailMessage = new MailMessage
-            {
-                From = new MailAddress(_emailSetting.Username),
-                Subject = subject,
-                Body = body,
-                IsBodyHtml = isBodyHtml,
-            };
-            mailMessage.To.Add(toEmail);
-
-            await _smtpClient.SendMailAsync(mailMessage);
+            using var client = new SmtpClient();
+            await client.ConnectAsync(_emailSetting.Server, _emailSetting.Port, SecureSocketOptions.StartTls);
+            await client.AuthenticateAsync(_emailSetting.Username, _emailSetting.Password);
+            await client.SendAsync(message);
+            await client.DisconnectAsync(true);
         }
 
         public async Task<bool> SendActivationEmailAsync(string userName, string toEmail, string linkActivate, DateTime expiryDate)
@@ -51,13 +51,29 @@ namespace EVServiceCenterMaintenanceAPI.Services
             try
             {
                 var message = EmailTemplate.GenerateActivationEmailTemplate(userName, linkActivate, expiryDate);
-                await SendEmailAsync(toEmail, "Mã OTP của bạn", message, true);
+                await SendEmailAsync(toEmail, "Kích hoạt tài khoản của bạn", message, true);
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return false;
             }
         }
+
+        public async Task<bool> SendUserCreatedEmailAsync(UserResponseDto user, string password, string recipientEmail)
+        {
+
+            try
+            {
+                var emailTemplate = EmailTemplate.GenerateUserCreatedEmailTemplate(user, password);
+                await SendEmailAsync(recipientEmail, "Thông báo tạo tài khoản mới", emailTemplate);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
     }
 }

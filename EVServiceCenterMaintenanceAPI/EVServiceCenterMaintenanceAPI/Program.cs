@@ -1,5 +1,6 @@
 using EVServiceCenterMaintenanceAPI.DAO;
 using EVServiceCenterMaintenanceAPI.DTO;
+using EVServiceCenterMaintenanceAPI.Extensions;
 using EVServiceCenterMaintenanceAPI.Models;
 using EVServiceCenterMaintenanceAPI.Services;
 using EVServiceCenterMaintenanceAPI.Utils;
@@ -8,12 +9,22 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Net;
 using System.Text;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
-builder.Services.AddControllers();
+builder.Services.AddControllers().ConfigureApiBehaviorOptions(configure =>
+{
+    configure.SuppressModelStateInvalidFilter = true;
+}).AddJsonOptions(configure =>
+{
+    configure.JsonSerializerOptions.PropertyNamingPolicy = null;
+    configure.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    configure.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+});
+
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -64,6 +75,8 @@ builder.Services.AddScoped<UserDao>();
 builder.Services.AddScoped<AuthDao>();
 builder.Services.AddScoped<EmailService>();
 builder.Services.Configure<EmailSetting>(builder.Configuration.GetSection("EmailSettings"));
+builder.Services.AddScoped<ImageService>();
+
 
 // Configure Authentication
 builder.Services.AddAuthentication(options =>
@@ -123,16 +136,24 @@ builder.Services.AddAuthentication(options =>
 });
 
 // Configure Authorization
-builder.Services.AddAuthorization(options =>
-{
-    options.AddPolicy("Admin", policy => policy.RequireRole("Admin"));
-    options.AddPolicy("Customer", policy => policy.RequireRole("Customer"));
-    options.AddPolicy("Staff", policy => policy.RequireRole("Staff"));
-    options.AddPolicy("Technician", policy => policy.RequireRole("Technician"));
-});
+builder.Services.AddAuthorizationBuilder()
+                              // Configure Authorization
+                              .AddPolicy("Admin", policy => policy.RequireRole("Admin"))
+                              // Configure Authorization
+                              .AddPolicy("Customer", policy => policy.RequireRole("Customer"))
+                              // Configure Authorization
+                              .AddPolicy("Staff", policy => policy.RequireRole("Staff"))
+                              // Configure Authorization
+                              .AddPolicy("Technician", policy => policy.RequireRole("Technician"));
 
 
 var app = builder.Build();
+
+//Seed Admin user on startup
+using (var scope = app.Services.CreateScope())
+{
+    await DatabaseSeeder.SeedAdminUserAsync(scope.ServiceProvider);
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -140,6 +161,14 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "EV Service Center Maintenance API v1"));
 }
+
+//Ensure exist wwwroot
+var webRootPath = app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+if (!Directory.Exists(webRootPath))
+{
+    Directory.CreateDirectory(webRootPath);
+}
+
 app.UseStaticFiles();
 
 app.UseCors();

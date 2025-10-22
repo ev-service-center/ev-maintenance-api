@@ -7,7 +7,7 @@ public partial class Invoice
 {
     public int InvoiceId { get; set; }
 
-    public int AppointmentId { get; set; }
+    public int WorkOrderId { get; set; }
 
     public decimal TotalAmount { get; set; }
 
@@ -21,7 +21,7 @@ public partial class Invoice
 
     public DateTime UpdatedAt { get; set; }
 
-    public virtual Appointment Appointment { get; set; } = null!;
-
     public virtual ICollection<Payment> Payments { get; set; } = new List<Payment>();
+
+    public virtual WorkOrder WorkOrder { get; set; } = null!;
 }

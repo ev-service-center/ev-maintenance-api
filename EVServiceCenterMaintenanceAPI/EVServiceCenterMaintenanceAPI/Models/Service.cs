@@ -27,7 +27,7 @@ public partial class Service
 
     public DateTime UpdatedAt { get; set; }
 
-    public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
+    public virtual ICollection<AppointmentService> AppointmentServices { get; set; } = new List<AppointmentService>();
 
     public virtual ICollection<Reminder> Reminders { get; set; } = new List<Reminder>();
 }

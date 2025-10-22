@@ -1,4 +1,5 @@
-﻿using EVServiceCenterMaintenanceAPI.Models;
+﻿using EVServiceCenterMaintenanceAPI.Enums;
+using EVServiceCenterMaintenanceAPI.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace EVServiceCenterMaintenanceAPI.DAO
@@ -58,6 +59,22 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 token.UpdatedAt = DateTime.UtcNow;
                 await UpdateTokenAsync(token);
             }
+        }
+
+        public async Task RevokeRefreshTokensByUserIdAsync(int userId)
+        {
+            var tokens = await _context.AuthTokens
+                .Where(t => t.UserId == userId && t.TokenType == TokenType.Refresh.ToString() && !t.IsUsed)
+                .ToListAsync();
+
+            foreach (var token in tokens)
+            {
+                token.IsUsed = true;
+                token.UpdatedAt = DateTime.UtcNow;
+            }
+
+            if (tokens.Count != 0)
+                await _context.SaveChangesAsync();
         }
     }
 }
