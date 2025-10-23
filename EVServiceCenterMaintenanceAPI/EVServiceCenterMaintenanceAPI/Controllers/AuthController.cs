@@ -242,11 +242,12 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 
         [HttpPost("logout")]
         [Authorize]
-        public async Task<IActionResult> Logout()
+        public async Task<IActionResult> Logout([FromBody] RefreshTokenRequestDto refreshToken)
         {
             try
             {
                 var userIdClaim = User.FindFirst("UserId")?.Value;
+                
                 if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
                     return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
 
@@ -254,7 +255,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 if (user == null)
                     return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "User not found."));
 
-                await _authDao.RevokeRefreshTokensByUserIdAsync(user.UserId);
+                await _authDao.RevokeRefreshTokenByValueAsync(refreshToken.RefreshToken);
 
                 return Ok(new ApiResponse<object>(200, "Success", "Logout successful."));
             }
