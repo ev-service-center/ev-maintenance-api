@@ -407,6 +407,82 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             }
         }
 
+        [HttpGet("role/{role}")]
+        [Authorize(Roles = "Staff,Admin")]
+        public async Task<IActionResult> GetUsersByRole(string role)
+        {
+            try
+            {
+                var roleEnum = Enum.Parse<UserRole>(role, true);
+                var users = await _userDao.GetUsersByRoleAsync(roleEnum);
+                var dtos = users.Select(u => new UserResponseDto
+                {
+                    UserId = u.UserId,
+                    Username = u.Username,
+                    FullName = u.FullName,
+                    Email = u.Email,
+                    Phone = u.Phone,
+                    Role = Enum.Parse<UserRole>(u.Role),
+                    Status = Enum.Parse<UserStatus>(u.Status),
+                    Avatar = u.Avatar,
+                    CreatedAt = u.CreatedAt,
+                    UpdatedAt = u.UpdatedAt
+                }).ToList();
+
+                return Ok(new ApiResponse<List<UserResponseDto>>(200, "Success", "Users retrieved successfully.", data: dtos));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpPost("change-password-otp")]
+        [Authorize]
+        public async Task<IActionResult> ChangePasswordOTP()
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst("UserId")?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                var user = await _userDao.GetUserByIdAsync(userId);
+                if (user == null)
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "User not found."));
+
+                var otp = OtpHelper.GenerateOtp();
+                var otpTokenResult = OtpHelper.GenerateOtpToken(otp);
+                var authToken = new AuthToken
+                {
+                    UserId = user.UserId,
+                    TokenType = TokenType.OTP.ToString(),
+                    TokenValue = otpTokenResult.Token,
+                    ExpiresAt = otpTokenResult.ExpiresAt,
+                    CreatedAt = DateTime.UtcNow,
+                    IsUsed = false
+                };
+                await _authDao.CreateTokenAsync(authToken);
+
+                var emailSent = await _emailService.SendOtpEmailAsync(user.FullName, user.Email, otp, authToken.ExpiresAt);
+                if (!emailSent)
+                {
+                    await _authDao.MarkTokenAsUsedAsync(authToken.TokenValue, TokenType.OTP.ToString());
+                    return StatusCode(500, new ApiResponse<object>(500, "Error", "Failed to send OTP email."));
+                }
+
+                return Ok(new ApiResponse<object>(200, "Success", "OTP sent to your email. Please check within 5 minutes.", null, new
+                {
+                    Message = "New OTP sent successfully",
+                    ExpiresIn = "5 minutes"
+                }));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to send OTP: {ex.Message}"));
+            }
+        }
+
         //Helper Function
         private static string GenerateRandomPassword(int length = 12)
         {
@@ -423,3 +499,4 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         }
     }
 }
+

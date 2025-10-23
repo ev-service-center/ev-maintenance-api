@@ -1,4 +1,5 @@
-﻿using EVServiceCenterMaintenanceAPI.Models;
+﻿using EVServiceCenterMaintenanceAPI.Enums;
+using EVServiceCenterMaintenanceAPI.Models;
 using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.EntityFrameworkCore;
 
@@ -176,5 +177,9 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             return true;
         }
 
+        public async Task<List<User>> GetUsersByRoleAsync(UserRole role)
+        {
+            return await _context.Users.Where(u => u.Role == role.ToString()).ToListAsync();
+        }
     }
 }
