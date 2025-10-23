@@ -96,6 +96,36 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             {
                 return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
             }
+        } 
+
+        [HttpGet("customer/{customerId}")]
+        [Authorize(Roles = "Customer")]
+        public async Task<IActionResult> GetVehiclesByCustomer(int customerId)
+        {
+            try
+            {
+                var vehicles = await _vehicleDao.GetVehiclesByCustomerIdAsync(customerId);
+                var dtos = vehicles.Select(v => new VehicleResponeDto
+                {
+                    VehicleId = v.VehicleId,
+                    CustomerId = v.CustomerId,
+                    Model = v.Model,
+                    VIN = v.Vin,
+                    ManufactureYear = v.ManufactureYear,
+                    CurrentMileage = v.CurrentMileage!.Value,
+                    LastMaintenanceDate = v.LastMaintenanceDate,
+                    Color = v.Color,
+                    Plate = v.Plate,
+                    CreatedAt = v.CreatedAt,
+                    UpdatedAt = v.UpdatedAt
+                }).ToList();
+
+                return Ok(new ApiResponse<List<VehicleResponeDto>>(200, "Success", "Vehicles retrieved successfully.", data: dtos));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
         }
     }
 }

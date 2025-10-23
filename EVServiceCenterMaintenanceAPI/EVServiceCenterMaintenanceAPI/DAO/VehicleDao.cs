@@ -37,5 +37,13 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 .Include(v => v.MaintenanceHistories)
                 .FirstOrDefaultAsync(v => v.VehicleId == vehicleId);
         }
+
+        public async Task<List<Vehicle>> GetVehiclesByCustomerIdAsync(int customerId)
+        {
+            return await _context.Vehicles
+                .Where(v => v.CustomerId == customerId)
+                .Include(v => v.MaintenanceHistories)
+                .ToListAsync();
+        }
     }
 }
