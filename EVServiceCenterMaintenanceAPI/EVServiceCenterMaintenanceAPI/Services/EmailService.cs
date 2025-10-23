@@ -75,5 +75,18 @@ namespace EVServiceCenterMaintenanceAPI.Services
             }
         }
 
+        public async Task<bool> SendOtpEmailAsync(string userName, string toEmail, string otpCode, DateTime expiryDate)
+        {
+            try
+            {
+                var message = EmailTemplate.GenerateOtpEmailTemplate(userName, otpCode, expiryDate);
+                await SendEmailAsync(toEmail, "Mã OTP của bạn", message, true);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                return false;
+            }
+        }
     }
 }

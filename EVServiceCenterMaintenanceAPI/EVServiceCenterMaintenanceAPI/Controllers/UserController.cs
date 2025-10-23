@@ -437,6 +437,52 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             }
         }
 
+        [HttpPost("change-password-otp")]
+        [Authorize]
+        public async Task<IActionResult> ChangePasswordOTP()
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst("UserId")?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                var user = await _userDao.GetUserByIdAsync(userId);
+                if (user == null)
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "User not found."));
+
+                var otp = OtpHelper.GenerateOtp();
+                var otpTokenResult = OtpHelper.GenerateOtpToken(otp);
+                var authToken = new AuthToken
+                {
+                    UserId = user.UserId,
+                    TokenType = TokenType.OTP.ToString(),
+                    TokenValue = otpTokenResult.Token,
+                    ExpiresAt = otpTokenResult.ExpiresAt,
+                    CreatedAt = DateTime.UtcNow,
+                    IsUsed = false
+                };
+                await _authDao.CreateTokenAsync(authToken);
+
+                var emailSent = await _emailService.SendOtpEmailAsync(user.FullName, user.Email, otp, authToken.ExpiresAt);
+                if (!emailSent)
+                {
+                    await _authDao.MarkTokenAsUsedAsync(authToken.TokenValue, TokenType.OTP.ToString());
+                    return StatusCode(500, new ApiResponse<object>(500, "Error", "Failed to send OTP email."));
+                }
+
+                return Ok(new ApiResponse<object>(200, "Success", "OTP sent to your email. Please check within 5 minutes.", null, new
+                {
+                    Message = "New OTP sent successfully",
+                    ExpiresIn = "5 minutes"
+                }));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to send OTP: {ex.Message}"));
+            }
+        }
+
         //Helper Function
         private static string GenerateRandomPassword(int length = 12)
         {
