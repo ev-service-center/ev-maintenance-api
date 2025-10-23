@@ -1,0 +1,101 @@
+﻿using EVServiceCenterMaintenanceAPI.DTO;
+using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using EVServiceCenterMaintenanceAPI.DAO;
+
+namespace EVServiceCenterMaintenanceAPI.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    public class VehicleController : ControllerBase
+    {
+        private readonly VehicleDao _vehicleDao;
+        private readonly ImageService _imageService;
+
+        public VehicleController(VehicleDao vehicleDao, ImageService imageService)
+        {
+            _vehicleDao = vehicleDao;
+            _imageService = imageService;
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "Customer,Staff,Admin")]
+        public async Task<IActionResult> CreateVehicle([FromBody] VehicleCreateRequestDto dto)
+        {
+            try
+            {
+                var vehicle = new Vehicle
+                {
+                    CustomerId = dto.CustomerId,
+                    Model = dto.Model,
+                    Vin = dto.VIN,
+                    ManufactureYear = dto.ManufactureYear,
+                    CurrentMileage = dto.CurrentMileage,
+                    Color = dto.Color,
+                    Plate = dto.Plate
+                };
+
+                // validate sau
+
+                var createdVehicle = await _vehicleDao.CreateVehicleAsync(vehicle);
+                var createdDto = new VehicleResponeDto
+                {
+                    VehicleId = createdVehicle.VehicleId,
+                    CustomerId = createdVehicle.CustomerId,
+                    Model = createdVehicle.Model,
+                    VIN = createdVehicle.Vin,
+                    ManufactureYear = createdVehicle.ManufactureYear,
+                    CurrentMileage = createdVehicle.CurrentMileage!.Value,
+                    LastMaintenanceDate = createdVehicle.LastMaintenanceDate,
+                    Color = createdVehicle.Color,
+                    Plate = createdVehicle.Plate,
+                    CreatedAt = createdVehicle.CreatedAt,
+                    UpdatedAt = createdVehicle.UpdatedAt
+                };
+
+                //tao remider sau
+
+                return CreatedAtAction(nameof(GetVehicle), new { id = createdVehicle.VehicleId }, new ApiResponse<VehicleResponeDto>(201, "Created", "Vehicle created successfully.", data: createdDto)); //:| e cx ko bt nx
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpGet("{id}")]
+        [Authorize]
+        public async Task<IActionResult> GetVehicle(int id)
+        {
+            try
+            {
+                var vehicle = await _vehicleDao.GetVehicleByIdAsync(id);
+                if (vehicle == null)
+                    return NotFound(new ApiResponse<VehicleResponeDto>(404, "NotFound", "Vehicle not found."));
+
+                var dto = new VehicleResponeDto
+                {
+                    VehicleId = vehicle.VehicleId,
+                    CustomerId = vehicle.CustomerId,
+                    Model = vehicle.Model,
+                    VIN = vehicle.Vin,
+                    ManufactureYear = vehicle.ManufactureYear,
+                    CurrentMileage = vehicle.CurrentMileage!.Value,
+                    LastMaintenanceDate = vehicle.LastMaintenanceDate,
+                    Color = vehicle.Color,
+                    Plate = vehicle.Plate,
+                    CreatedAt = vehicle.CreatedAt,
+                    UpdatedAt = vehicle.UpdatedAt
+                };
+
+                return Ok(new ApiResponse<VehicleResponeDto>(200, "Success", "Vehicle retrieved successfully.", data: dto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+    }
+}
