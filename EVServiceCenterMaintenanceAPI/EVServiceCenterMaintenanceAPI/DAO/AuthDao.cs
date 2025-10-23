@@ -76,5 +76,18 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             if (tokens.Count != 0)
                 await _context.SaveChangesAsync();
         }
+
+        public async Task RevokeRefreshTokenByValueAsync(string value)
+        {
+            var tokens = await _context.AuthTokens
+                .Where(t => t.TokenValue == value && t.TokenType == TokenType.Refresh.ToString() && !t.IsUsed).FirstOrDefaultAsync();
+
+            if (tokens != null)
+            {
+                tokens.UpdatedAt = DateTime.UtcNow;
+                tokens.IsUsed = true;
+                _context.SaveChanges();
+            }
+        }
     }
 }
