@@ -28,8 +28,18 @@ namespace EVServiceCenterMaintenanceAPI.DTO
 
     public class ForgotPasswordRequestDto
     {
-        [Required, StringLength(100)]
+        [Required, EmailAddress, StringLength(100)]
         public string Email { get; set; } = null!;
+    }
+
+    public class ResetPasswordWithOtpRequestDto
+    {
+        [Required, EmailAddress, StringLength(100)]
+        public string Email { get; set; } = null!;
+        [Required, StringLength(10)]
+        public string Otp { get; set; } = null!;
+        [Required, StringLength(32, MinimumLength = 8)]
+        public string Password { get; set; } = null!;
     }
 
     public class CheckOtpPasswordRequestDto
