@@ -1,5 +1,17 @@
 ﻿namespace EVServiceCenterMaintenanceAPI.Enums
 {
+
+    public enum StringLength
+    {
+        FullName = 50,
+        MinUsername = 3,
+        MaxUsername = 20,
+        MinPassWord = 8,
+        MaxPassWord = 32,
+        Email = 100,
+        Token = 500,
+        Otp = 6
+    }
     public enum UserRole
     {
         Customer,
