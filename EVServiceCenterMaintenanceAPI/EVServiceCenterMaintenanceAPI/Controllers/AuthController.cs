@@ -40,7 +40,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             if (!ModelState.IsValid)
             {
-                var errors = ModelState.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray());
+                var errors = ModelState
+                            .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
                 return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
             }
 
@@ -114,7 +116,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             if (!ModelState.IsValid)
             {
-                var errors = ModelState.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray());
+                var errors = ModelState
+                            .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
                 return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
             }
 
@@ -190,7 +194,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             if (!ModelState.IsValid)
             {
-                var errors = ModelState.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray());
+                var errors = ModelState
+                            .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
                 return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
             }
 
@@ -234,12 +240,60 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             }
         }
 
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordWithOtpRequestDto resetPasswordDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState
+                            .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
+                return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+            }
+
+            try
+            {
+                if (!IsValidEmail(resetPasswordDto.Email))
+                    return BadRequest(new ApiResponse<object>(400, "Bad Request", "Invalid email format."));
+
+                var user = await _userDao.GetUserByEmailAsync(resetPasswordDto.Email);
+                if (user == null)
+                    return NotFound(new ApiResponse<object>(404, "Not Found", "User not found."));
+
+                var otpToken = await _authDao.GetValidTokenByValueAndTypeAsync(resetPasswordDto.Otp, TokenType.OTP.ToString());
+                if (otpToken == null || otpToken.UserId != user.UserId)
+                    return BadRequest(new ApiResponse<object>(400, "Bad Request", "Invalid or expired OTP."));
+
+                var (isValid, errorMessage) = ValidationHelper.ValidatePasswordStrength(resetPasswordDto.Password);
+                if (!isValid)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "Bad Request", errorMessage));
+                }
+                // 1. Update password FIRST (most important)
+                await _userDao.UpdateUserAsync(user, resetPasswordDto.Password);
+
+                // 2. Mark OTP as used (after password updated successfully)
+                await _authDao.MarkTokenAsUsedAsync(resetPasswordDto.Otp, TokenType.OTP.ToString());
+
+                // 3. Revoke all refresh tokens for security (last)
+                await _authDao.RevokeRefreshTokensByUserIdAsync(user.UserId);
+
+                return Ok(new ApiResponse<object>(200, "Success", "Password reset successfully. You can now login with your new password."));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to reset password: {ex.Message}"));
+            }
+        }
+
         [HttpPost("refresh-token")]
         public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequestDto refreshTokenDto)
         {
             if (!ModelState.IsValid)
             {
-                var errors = ModelState.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray());
+                var errors = ModelState
+                            .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
                 return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
             }
 
@@ -291,7 +345,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             if (!ModelState.IsValid)
             {
-                var errors = ModelState.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray());
+                var errors = ModelState
+                            .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
                 return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
             }
 
@@ -320,6 +376,13 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         [Authorize]
         public async Task<IActionResult> Logout([FromBody] RefreshTokenRequestDto refreshToken)
         {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState
+                           .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                           .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
+                return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+            }
             try
             {
                 var userIdClaim = User.FindFirst("UserId")?.Value;
