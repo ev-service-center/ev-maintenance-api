@@ -61,6 +61,18 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             }
         }
 
+        public async Task<AuthToken?> GetValidTokenByUserIdAndTypeAsync(int userId, string tokenType)
+        {
+            return await _context.AuthTokens
+                .Where(t =>
+                    t.UserId == userId &&
+                    t.TokenType == tokenType &&
+                    !t.IsUsed &&
+                    t.ExpiresAt > DateTime.UtcNow)
+                .OrderByDescending(t => t.CreatedAt)
+                .FirstOrDefaultAsync();
+        }
+
         public async Task RevokeRefreshTokensByUserIdAsync(int userId)
         {
             var tokens = await _context.AuthTokens

@@ -131,7 +131,7 @@ namespace EVServiceCenterMaintenanceAPI.Utils
 <body>
     <div class='email-container'>
         <div class='header'>
-            <img src='https://res.cloudinary.com/dphys6egj/image/upload/v1759812317/Pngtree_hipster_bike_electric_logo_design_4847419_wvci4k.jpg' alt='Logo MUSIC'>
+            <img src='https://res.cloudinary.com/dphys6egj/image/upload/v1759812317/Pngtree_hipster_bike_electric_logo_design_4847419_wvci4k.jpg' alt='Logo EV Service Center'>
             <h1>Yêu cầu đặt lại mật khẩu</h1>
             <p>Xác minh danh tính của bạn</p>
         </div>
