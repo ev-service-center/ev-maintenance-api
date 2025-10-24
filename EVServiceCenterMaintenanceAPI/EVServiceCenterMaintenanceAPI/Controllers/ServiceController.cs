@@ -133,5 +133,23 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to update service: {ex.Message}"));
             }
         }
+
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> DeleteService(int id)
+        {
+            try
+            {
+                var success = await _serviceDao.DeleteServiceAsync(id);
+                if (!success)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "Service not found."));
+
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to delete service: {ex.Message}"));
+            }
+        }
     }
 }
