@@ -77,6 +77,7 @@ builder.Services.AddScoped<EmailService>();
 builder.Services.Configure<EmailSetting>(builder.Configuration.GetSection("EmailSettings"));
 builder.Services.AddScoped<ImageService>();
 builder.Services.AddScoped<VehicleDao>();
+builder.Services.AddScoped<AuthTokenDao>();
 
 
 
