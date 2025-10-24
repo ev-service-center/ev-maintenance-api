@@ -1,4 +1,5 @@
-﻿using EVServiceCenterMaintenanceAPI.Enums;
+﻿using System.ComponentModel.DataAnnotations;
+using EVServiceCenterMaintenanceAPI.Enums;
 
 namespace EVServiceCenterMaintenanceAPI.DTO
 {
@@ -12,5 +13,15 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         public DateTime ExpiresAt { get; set; }
         public bool IsUsed { get; set; }
         public DateTime UpdatedAt { get; set; }
+    }
+
+    public class AuthTokenUpdateRequestDto
+    {
+        [Required] public int TokenId { get; set; }
+        [Required] public int UserId { get; set; }
+        [Required] public TokenType TokenType { get; set; }
+        [Required] public string TokenValue { get; set; } = null!;
+        [Required] public DateTime ExpiresAt { get; set; }
+        public bool IsUsed { get; set; }
     }
 }
