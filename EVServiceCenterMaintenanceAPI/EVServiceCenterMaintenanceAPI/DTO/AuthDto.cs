@@ -1,4 +1,6 @@
-﻿namespace EVServiceCenterMaintenanceAPI.DTO
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace EVServiceCenterMaintenanceAPI.DTO
 {
     public class RefreshTokenRequestDto
     {
@@ -22,6 +24,12 @@
     {
         public int UserId { get; set; }
         public string Token { get; set; } = null!;
+    }
+
+    public class ForgotPasswordRequestDto
+    {
+        [Required, StringLength(100)]
+        public string Email { get; set; } = null!;
     }
 
     public class CheckOtpPasswordRequestDto

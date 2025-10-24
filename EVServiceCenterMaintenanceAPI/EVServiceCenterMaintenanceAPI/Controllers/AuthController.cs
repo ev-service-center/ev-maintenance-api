@@ -109,6 +109,82 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             return await LoginInternal(loginDto, requireAdmin: true);
         }
 
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequestDto forgotPasswordDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray());
+                return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+            }
+
+            try
+            {
+                if (!IsValidEmail(forgotPasswordDto.Email))
+                    return BadRequest(new ApiResponse<object>(400, "Bad Request", "Invalid email format."));
+
+                var user = await _userDao.GetUserByEmailAsync(forgotPasswordDto.Email);
+                if (user == null)
+                    return NotFound(new ApiResponse<object>(404, "Not Found", "Email not found."));
+
+                if (user.Status == UserStatus.Pending.ToString())
+                    return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<object>(400, "Bad Request", "Account is pending activation. Please check your email or contact support."));
+                if (user.Status == UserStatus.Inactive.ToString())
+                    return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<object>(400, "Bad Request", "Account is inactive. Please contact support."));
+                if (user.Status == UserStatus.Suspended.ToString())
+                    return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<object>(403, "Forbidden", "Account is suspended. Please contact support."));
+
+                // Check for existing OTP to prevent spam
+                var existingOtp = await _authDao.GetValidTokenByUserIdAndTypeAsync(user.UserId, TokenType.OTP.ToString());
+                if (existingOtp != null)
+                {
+                    var timeSinceLastOtp = DateTime.UtcNow - existingOtp.UpdatedAt;
+                    if (timeSinceLastOtp < TimeSpan.FromSeconds(60))
+                    {
+                        var waitSeconds = 60 - (int)timeSinceLastOtp.TotalSeconds;
+                        return BadRequest(new ApiResponse<object>(429, "Too Many Requests", $"Please wait {waitSeconds} seconds before requesting a new OTP."));
+                    }
+
+                    // Resend existing OTP (still valid)
+                    var emailSent = await _emailService.SendOtpEmailAsync(user.FullName, user.Email, existingOtp.TokenValue, existingOtp.ExpiresAt);
+                    if (!emailSent)
+                    {
+                        return StatusCode(500, new ApiResponse<object>(500, "Error", "Failed to resend OTP email."));
+                    }
+
+                    existingOtp.UpdatedAt = DateTime.UtcNow;
+                    await _authDao.UpdateTokenAsync(existingOtp);
+                    var remainingMinutes = (int)Math.Ceiling((existingOtp.ExpiresAt - DateTime.UtcNow).TotalMinutes);
+                    return Ok(new ApiResponse<object>(200, "Success", $"OTP has been resent to your email. Valid for {remainingMinutes} minute(s)."));
+                }
+
+                var otp = OtpHelper.GenerateOtp();
+                var otpTokenResult = OtpHelper.GenerateOtpToken(otp);
+                var authToken = new AuthToken
+                {
+                    UserId = user.UserId,
+                    TokenType = TokenType.OTP.ToString(),
+                    TokenValue = otpTokenResult.Token,
+                    ExpiresAt = otpTokenResult.ExpiresAt,
+                    CreatedAt = DateTime.UtcNow,
+                    IsUsed = false
+                };
+                await _authDao.CreateTokenAsync(authToken);
+
+                var emailSentNew = await _emailService.SendOtpEmailAsync(user.FullName, user.Email, otp, authToken.ExpiresAt);
+                if (!emailSentNew)
+                {
+                    return StatusCode(500, new ApiResponse<object>(500, "Error", "Failed to send OTP email. Please try again."));
+                }
+
+                return Ok(new ApiResponse<object>(200, "Success", "OTP sent to your email. Please check within 5 minutes."));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to send OTP: {ex.Message}"));
+            }
+        }
+
         [HttpPost("activate")]
         public async Task<IActionResult> ActivateAccount([FromBody] ActivateAccountRequestDto activateDto)
         {
@@ -247,7 +323,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             try
             {
                 var userIdClaim = User.FindFirst("UserId")?.Value;
-                
+
                 if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
                     return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
 
