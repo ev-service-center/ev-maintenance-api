@@ -40,6 +40,8 @@
     {
         Active,
         Inactive
+    }
+
     public enum ReminderType
     {
         Maintenance,
