@@ -41,5 +41,33 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
             return suggestions;
         }
+
+        public async Task<Part> UpdatePartAsync(Part part)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var existingPart = await _context.Parts.FirstOrDefaultAsync(p => p.PartId == part.PartId);
+                if (existingPart == null)
+                    throw new Exception($"Part with ID {part.PartId} not found.");
+
+                existingPart.PartName = part.PartName;
+                existingPart.Description = part.Description;
+                existingPart.Price = part.Price;
+                existingPart.QuantityInStock = part.QuantityInStock;
+                existingPart.MinStock = part.MinStock;
+                existingPart.Status = part.Status;
+                existingPart.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return existingPart;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception($"Failed to update part with ID {part.PartId}.", ex);
+            }
+        }
     }
 }
