@@ -12,11 +12,13 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
     public class VehicleController : ControllerBase
     {
         private readonly VehicleDao _vehicleDao;
+        private readonly ReminderDao _reminderDao;
         private readonly ImageService _imageService;
 
-        public VehicleController(VehicleDao vehicleDao, ImageService imageService)
+        public VehicleController(VehicleDao vehicleDao, ReminderDao reminderDao, ImageService imageService)
         {
             _vehicleDao = vehicleDao;
+            _reminderDao = reminderDao;
             _imageService = imageService;
         }
 
@@ -55,9 +57,11 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     UpdatedAt = createdVehicle.UpdatedAt
                 };
 
-                //tao remider sau
+                await _reminderDao.GenerateRemindersForVehicleAsync(createdVehicle.VehicleId);
 
-                return CreatedAtAction(nameof(GetVehicle), new { id = createdVehicle.VehicleId }, new ApiResponse<VehicleResponeDto>(201, "Created", "Vehicle created successfully.", data: createdDto)); //:| e cx ko bt nx
+                return CreatedAtAction(nameof(GetVehicle),
+                    new { id = createdVehicle.VehicleId },
+                    new ApiResponse<VehicleResponeDto>(201, "Created", "Vehicle created successfully.", data: createdDto));
             }
             catch (Exception ex)
             {

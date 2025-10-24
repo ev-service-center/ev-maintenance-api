@@ -40,6 +40,12 @@
     {
         Active,
         Inactive
+    public enum ReminderType
+    {
+        Maintenance,
+        Payment,
+        Renewal,
+        Rating
     }
 
     public static class DefaultAvatar
