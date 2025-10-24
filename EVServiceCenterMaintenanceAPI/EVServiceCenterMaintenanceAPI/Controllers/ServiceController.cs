@@ -1,7 +1,9 @@
 ﻿using EVServiceCenterMaintenanceAPI.DAO;
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Enums;
+using EVServiceCenterMaintenanceAPI.Models;
 using EVServiceCenterMaintenanceAPI.Params;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EVServiceCenterMaintenanceAPI.Controllers
@@ -34,8 +36,8 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     BasePrice = service.BasePrice,
                     EstimatedTime = service.EstimatedTime,
                     Status = Enum.Parse<ServiceStatus>(service.Status),
-                    ReminderIntervalDays = service.ReminderIntervalDays.Value,
-                    ReminderMileage = service.ReminderMileage.Value,
+                    ReminderIntervalDays = service.ReminderIntervalDays!.Value,
+                    ReminderMileage = service.ReminderMileage!.Value,
                     Notes = service.Notes,
                     CreatedAt = service.CreatedAt,
                     UpdatedAt = service.UpdatedAt
@@ -77,6 +79,58 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to retrieve active services: {ex.Message}"));
+            }
+        }
+
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> UpdateService(int id, [FromBody] ServiceUpdateRequestDto dto)
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray());
+                return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+            }
+
+            try
+            {
+                if (id != dto.ServiceId)
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Service ID mismatch."));
+
+                var service = new Service
+                {
+                    ServiceId = dto.ServiceId,
+                    ServiceName = dto.ServiceName,
+                    Description = dto.Description,
+                    BasePrice = dto.BasePrice,
+                    EstimatedTime = dto.EstimatedTime,
+                    Status = dto.Status.ToString(),
+                    ReminderIntervalDays = dto.ReminderIntervalDays,
+                    ReminderMileage = dto.ReminderMileage,
+                    Notes = dto.Notes
+                };
+
+                var updatedService = await _serviceDao.UpdateServiceAsync(service);
+                var updatedDto = new ServiceResponseDto
+                {
+                    ServiceId = updatedService.ServiceId,
+                    ServiceName = updatedService.ServiceName,
+                    Description = updatedService.Description,
+                    BasePrice = updatedService.BasePrice,
+                    EstimatedTime = updatedService.EstimatedTime,
+                    Status = Enum.Parse<ServiceStatus>(updatedService.Status),
+                    ReminderIntervalDays = updatedService.ReminderIntervalDays!.Value,
+                    ReminderMileage = updatedService.ReminderMileage!.Value,
+                    Notes = updatedService.Notes,
+                    CreatedAt = updatedService.CreatedAt,
+                    UpdatedAt = updatedService.UpdatedAt
+                };
+
+                return Ok(new ApiResponse<ServiceResponseDto>(200, "Success", "Service updated successfully.", data: updatedDto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to update service: {ex.Message}"));
             }
         }
     }

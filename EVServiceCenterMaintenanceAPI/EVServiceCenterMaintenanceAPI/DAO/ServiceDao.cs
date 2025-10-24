@@ -67,5 +67,35 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
             return (services, total);
         }
+
+        public async Task<Service> UpdateServiceAsync(Service service)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var existingService = await _context.Services.FirstOrDefaultAsync(s => s.ServiceId == service.ServiceId);
+                if (existingService == null)
+                    throw new Exception($"Service with ID {service.ServiceId} not found.");
+
+                existingService.ServiceName = service.ServiceName;
+                existingService.Description = service.Description;
+                existingService.BasePrice = service.BasePrice;
+                existingService.EstimatedTime = service.EstimatedTime;
+                existingService.Status = service.Status;
+                existingService.ReminderIntervalDays = service.ReminderIntervalDays;
+                existingService.ReminderMileage = service.ReminderMileage;
+                existingService.Notes = service.Notes;
+                existingService.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return existingService;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception($"Failed to update service with ID {service.ServiceId}.", ex);
+            }
+        }
     }
 }
