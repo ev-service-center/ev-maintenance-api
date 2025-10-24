@@ -1,6 +1,7 @@
 ﻿using EVServiceCenterMaintenanceAPI.DAO;
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Enums;
+using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EVServiceCenterMaintenanceAPI.Controllers
@@ -45,6 +46,37 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to retrieve active service: {ex.Message}"));
+            }
+        }
+
+        [HttpGet("active")]
+        public async Task<IActionResult> GetAllActiveServices([FromQuery] ServiceQueryParams queryParams)
+        {
+            try
+            {
+                var (services, total) = await _serviceDao.GetAllActiveServicesAsync(queryParams);
+
+                var dtos = services.Select(s => new ServiceResponseDto
+                {
+                    ServiceId = s.ServiceId,
+                    ServiceName = s.ServiceName,
+                    Description = s.Description,
+                    BasePrice = s.BasePrice,
+                    EstimatedTime = s.EstimatedTime,
+                    Status = Enum.Parse<ServiceStatus>(s.Status),
+                    ReminderIntervalDays = s.ReminderIntervalDays!.Value,
+                    ReminderMileage = s.ReminderMileage!.Value,
+                    Notes = s.Notes,
+                    CreatedAt = s.CreatedAt,
+                    UpdatedAt = s.UpdatedAt
+                }).ToList();
+
+                var responseData = new { services = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
+                return Ok(new ApiResponse<object>(200, "Success", "Active services retrieved successfully.", data: responseData));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to retrieve active services: {ex.Message}"));
             }
         }
     }
