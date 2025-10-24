@@ -83,7 +83,7 @@ namespace EVServiceCenterMaintenanceAPI.Services
                 await SendEmailAsync(toEmail, "Mã OTP của bạn", message, true);
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return false;
             }

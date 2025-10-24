@@ -7,6 +7,7 @@ using EVServiceCenterMaintenanceAPI.Utils;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -59,6 +60,12 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddDbContext<EvserviceCenterDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// Redis Cache Configuration
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = builder.Configuration.GetConnectionString("Redis");
+    options.InstanceName = "EVServiceCenter";
+});
 //Configure CORS
 builder.Services.AddCors(options =>
 {
@@ -79,8 +86,7 @@ builder.Services.AddScoped<ImageService>();
 builder.Services.AddScoped<VehicleDao>();
 builder.Services.AddScoped<AuthTokenDao>();
 builder.Services.AddScoped<ServiceDao>();
-
-
+builder.Services.AddScoped<ITokenBlacklistService, TokenBlacklistService>();
 
 // Configure Authentication
 builder.Services.AddAuthentication(options =>
@@ -98,7 +104,7 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = builder.Configuration["Jwt:Issuer"],
         ValidAudience = builder.Configuration["Jwt:Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+            Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"] ?? throw new Exception("Jwt:Key is missing")))
     };
 
     options.Events = new JwtBearerEvents
@@ -112,6 +118,19 @@ builder.Services.AddAuthentication(options =>
                 context.Token = accessToken;
             }
             return Task.CompletedTask;
+        },
+        OnTokenValidated = async context =>
+        {
+            var jti = context.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+            if (!string.IsNullOrEmpty(jti))
+            {
+                var blacklistService = context.HttpContext.RequestServices.GetRequiredService<ITokenBlacklistService>();
+                if (await blacklistService.IsTokenBlacklistedAsync(jti))
+                {
+                    context.Fail("Token has been revoked");
+                    return;
+                }
+            }
         },
         OnChallenge = context =>
         {
