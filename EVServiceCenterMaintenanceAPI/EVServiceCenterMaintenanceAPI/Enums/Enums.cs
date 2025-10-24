@@ -36,6 +36,12 @@
         Refresh
     }
 
+    public enum ServiceStatus
+    {
+        Active,
+        Inactive
+    }
+
     public static class DefaultAvatar
     {
         public const string Local = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSAhEOYTOMNLDkzULpt0bj-RdWGvRsfw5S-aQ&s";
