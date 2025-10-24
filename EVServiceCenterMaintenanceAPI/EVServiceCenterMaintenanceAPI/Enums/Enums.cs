@@ -36,6 +36,10 @@
         Refresh
     }
 
+    public enum ServiceStatus
+    {
+        Active,
+        Inactive
     public enum ReminderType
     {
         Maintenance,
