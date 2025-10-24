@@ -24,6 +24,14 @@
         Refresh
     }
 
+    public enum ReminderType
+    {
+        Maintenance,
+        Payment,
+        Renewal,
+        Rating
+    }
+
     public static class DefaultAvatar
     {
         public const string Local = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSAhEOYTOMNLDkzULpt0bj-RdWGvRsfw5S-aQ&s";
