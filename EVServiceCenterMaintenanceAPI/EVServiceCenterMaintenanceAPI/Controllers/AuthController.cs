@@ -22,17 +22,20 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         private readonly AuthDao _authDao;
         private readonly IConfiguration _configuration;
         private readonly EmailService _emailService;
+        private readonly ITokenBlacklistService _tokenBlacklistService;
 
         public AuthController(
             UserDao userDao,
             AuthDao authDao,
             IConfiguration configuration,
-            EmailService emailService)
+            EmailService emailService,
+            ITokenBlacklistService tokenBlacklistService)
         {
             _userDao = userDao ?? throw new ArgumentNullException(nameof(userDao));
             _authDao = authDao ?? throw new ArgumentNullException(nameof(authDao));
             _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
             _emailService = emailService ?? throw new ArgumentNullException(nameof(emailService));
+            _tokenBlacklistService = tokenBlacklistService ?? throw new ArgumentNullException(nameof(tokenBlacklistService));
         }
 
         [HttpPost("register")]
@@ -347,8 +350,11 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 // 2. Mark OTP as used (after password updated successfully)
                 await _authDao.MarkTokenAsUsedAsync(resetPasswordDto.Otp, TokenType.OTP.ToString());
 
-                // 3. Revoke all refresh tokens for security (last)
+                // 3. Revoke all refresh tokens for security
                 await _authDao.RevokeRefreshTokensByUserIdAsync(user.UserId);
+
+                // 4. Blacklist all JWT tokens for security
+                await _tokenBlacklistService.BlacklistAllUserTokensAsync(user.UserId);
 
                 return Ok(new ApiResponse<object>(200, "Success", "Password reset successfully. You can now login with your new password."));
             }
@@ -382,6 +388,18 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 if (authToken == null || authToken.UserId != userId)
                     return BadRequest(new ApiResponse<object>(400, "Bad Request", "Invalid or expired refresh token."));
 
+                // Blacklist old JWT token
+                var oldJti = HttpContext.User.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+                if (!string.IsNullOrEmpty(oldJti))
+                {
+                    var expClaim = HttpContext.User.FindFirst(JwtRegisteredClaimNames.Exp)?.Value;
+                    if (!string.IsNullOrEmpty(expClaim) && long.TryParse(expClaim, out var expUnix))
+                    {
+                        var expiresAt = DateTime.UnixEpoch.AddSeconds(expUnix);
+                        await _tokenBlacklistService.BlacklistTokenAsync(oldJti, expiresAt);
+                    }
+                }
+
                 var deviceHash = HashDeviceInfo(Request.Headers["User-Agent"].ToString() + HttpContext.Connection.RemoteIpAddress?.ToString());
                 var roles = new List<string> { user.Role };
                 var newAccessToken = GenerateJwtToken(user, roles, deviceHash);
@@ -401,6 +419,13 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     IsUsed = false
                 };
                 await _authDao.CreateTokenAsync(newAuthToken);
+
+                // Track new JWT token
+                var newJti = new JwtSecurityTokenHandler().ReadJwtToken(newAccessToken.Token).Claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Jti)?.Value;
+                if (!string.IsNullOrEmpty(newJti))
+                {
+                    await _tokenBlacklistService.TrackUserTokenAsync(user.UserId, newJti, newAccessToken.ExpiresAt);
+                }
 
                 return Ok(new ApiResponse<object>(200, "Success", "Token refreshed successfully.", null, new
                 {
@@ -443,38 +468,6 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             }
         }
 
-        [HttpPost("logout")]
-        [Authorize]
-        public async Task<IActionResult> Logout([FromBody] RefreshTokenRequestDto refreshToken)
-        {
-            if (!ModelState.IsValid)
-            {
-                var errors = ModelState
-                           .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
-                           .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
-                return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
-            }
-            try
-            {
-                var userIdClaim = User.FindFirst("UserId")?.Value;
-
-                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
-                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
-
-                var user = await _userDao.GetUserByIdAsync(userId);
-                if (user == null)
-                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "User not found."));
-
-                await _authDao.RevokeRefreshTokenByValueAsync(refreshToken.RefreshToken);
-
-                return Ok(new ApiResponse<object>(200, "Success", "Logout successful."));
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to logout: {ex.Message}"));
-            }
-        }
-
         //Function Helpers
 
         //private string HashPassword(string password)
@@ -486,7 +479,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             if (!ModelState.IsValid)
             {
-                var errors = ModelState.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray());
+                var errors = ModelState
+                            .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
                 return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
             }
 
@@ -524,6 +519,13 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     IsUsed = false
                 };
                 await _authDao.CreateTokenAsync(authToken);
+
+                // Track JWT token for blacklist management
+                var jti = new JwtSecurityTokenHandler().ReadJwtToken(accessToken.Token).Claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Jti)?.Value;
+                if (!string.IsNullOrEmpty(jti))
+                {
+                    await _tokenBlacklistService.TrackUserTokenAsync(user.UserId, jti, accessToken.ExpiresAt);
+                }
 
                 return Ok(new ApiResponse<object>(200, "Success", "Login successful.", null, new
                 {

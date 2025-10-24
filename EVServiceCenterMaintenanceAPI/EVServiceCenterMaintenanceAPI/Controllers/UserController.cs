@@ -1,4 +1,5 @@
-﻿using System.Security.Cryptography;
+﻿using System.IdentityModel.Tokens.Jwt;
+using System.Security.Cryptography;
 using EVServiceCenterMaintenanceAPI.DAO;
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Enums;
@@ -21,9 +22,12 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 
         private readonly AuthDao _authDao;
 
-        public UserController(UserDao userDao, ImageService imageService, EmailService emailService, AuthDao authDao)
+        private readonly ITokenBlacklistService _tokenBlacklistService;
+
+        public UserController(UserDao userDao, ITokenBlacklistService tokenBlacklistService, ImageService imageService, EmailService emailService, AuthDao authDao)
         {
             _userDao = userDao;
+            _tokenBlacklistService = tokenBlacklistService;
             _imageService = imageService;
             _emailService = emailService;
             _authDao = authDao;
@@ -356,6 +360,12 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 if (user == null)
                     return NotFound(new ApiResponse<object>(404, "NotFound", "User not found."));
 
+                // Revoke all refresh tokens
+                await _authDao.RevokeRefreshTokensByUserIdAsync(id);
+
+                // Blacklist all JWT tokens
+                await _tokenBlacklistService.BlacklistAllUserTokensAsync(id);
+
                 var success = await _userDao.DeleteUserAsync(id);
                 if (!success)
                     return NotFound(new ApiResponse<object>(404, "NotFound", "User not found."));
@@ -399,11 +409,57 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 // Revoke all refresh tokens for security
                 await _authDao.RevokeRefreshTokensByUserIdAsync(userId);
 
+                // Blacklist all JWT tokens for security
+                await _tokenBlacklistService.BlacklistAllUserTokensAsync(userId);
+
                 return Ok(new ApiResponse<object>(200, "Success", "Password changed successfully. Please login again with your new password."));
             }
             catch (Exception ex)
             {
                 return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to change password: {ex.Message}"));
+            }
+        }
+
+        [HttpPost("logout")]
+        [Authorize]
+        public async Task<IActionResult> Logout([FromBody] RefreshTokenRequestDto refreshToken)
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState
+                           .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                           .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
+                return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+            }
+            try
+            {
+                var userIdClaim = User.FindFirst("UserId")?.Value;
+                var jti = HttpContext.User.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                var user = await _userDao.GetUserByIdAsync(userId);
+                if (user == null)
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "User not found."));
+
+                await _authDao.RevokeRefreshTokenByValueAsync(refreshToken.RefreshToken);
+
+                if (!string.IsNullOrEmpty(jti))
+                {
+                    var expClaim = HttpContext.User.FindFirst(JwtRegisteredClaimNames.Exp)?.Value;
+                    if (!string.IsNullOrEmpty(expClaim) && long.TryParse(expClaim, out var expUnix))
+                    {
+                        var expiresAt = DateTime.UnixEpoch.AddSeconds(expUnix);
+                        await _tokenBlacklistService.BlacklistTokenAsync(jti, expiresAt);
+                    }
+                }
+
+                return Ok(new ApiResponse<object>(200, "Success", "Logout successful."));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to logout: {ex.Message}"));
             }
         }
 

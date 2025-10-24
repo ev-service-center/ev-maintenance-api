@@ -8,13 +8,13 @@
         public IDictionary<string, string[]>? Errors { get; set; }
         public T Data { get; set; } = default!;
 
-        public ApiResponse(int statusCode, string status, string message, IDictionary<string, string[]>? errors = null, T data = default)
+        public ApiResponse(int statusCode, string status, string message, IDictionary<string, string[]>? errors = null, T? data = default)
         {
             StatusCode = statusCode;
             Status = status;
             Message = message;
             Errors = errors;
-            Data = data;
+            Data = data!;
         }
     }
 }
