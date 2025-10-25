@@ -86,6 +86,9 @@ builder.Services.AddScoped<ImageService>();
 builder.Services.AddScoped<VehicleDao>();
 builder.Services.AddScoped<AuthTokenDao>();
 builder.Services.AddScoped<ServiceDao>();
+builder.Services.AddScoped<PartDao>();
+
+
 builder.Services.AddScoped<ITokenBlacklistService, TokenBlacklistService>();
 
 // Configure Authentication
