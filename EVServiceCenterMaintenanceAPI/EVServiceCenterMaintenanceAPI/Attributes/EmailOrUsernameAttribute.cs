@@ -8,7 +8,7 @@ namespace EVServiceCenterMaintenanceAPI.Attributes
         [GeneratedRegex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.IgnoreCase)]
         private static partial Regex EmailRegex();
 
-        [GeneratedRegex(@"^(?!.*[._-]{2})[a-z][\w.-]{2,19}$", RegexOptions.IgnoreCase)]
+        [GeneratedRegex(@"^(?!.*[._-]{2})[a-z0-9][\w.-]{2,19}$", RegexOptions.IgnoreCase)]
         private static partial Regex UsernameRegex();
 
         protected override ValidationResult? IsValid(object? value, ValidationContext validationContext)
