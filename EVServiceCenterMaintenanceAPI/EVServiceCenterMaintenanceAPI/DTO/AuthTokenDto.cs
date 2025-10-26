@@ -24,4 +24,12 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         [Required] public DateTime ExpiresAt { get; set; }
         public bool IsUsed { get; set; }
     }
+
+    public class AuthTokenCreateRequestDto
+    {
+        [Required] public int UserId { get; set; }
+        [Required] public TokenType TokenType { get; set; }
+        [Required] public string TokenValue { get; set; } = null!;
+        [Required] public DateTime ExpiresAt { get; set; }
+    }
 }

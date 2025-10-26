@@ -18,6 +18,8 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             _authTokenDao = authTokenDao;
         }
 
+
+
         [HttpGet("{id}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetAuthToken(int id)
@@ -81,6 +83,41 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 };
 
                 return Ok(new ApiResponse<AuthTokenResponseDto>(200, "Success", "Auth token updated successfully.", data: updatedDto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> CreateAuthToken([FromBody] AuthTokenCreateRequestDto dto)
+        {
+            try
+            {
+                var token = new AuthToken
+                {
+                    UserId = dto.UserId,
+                    TokenType = dto.TokenType.ToString(),
+                    TokenValue = dto.TokenValue,
+                    ExpiresAt = dto.ExpiresAt
+                };
+
+                var createdToken = await _authTokenDao.CreateAuthTokenAsync(token);
+                var createdDto = new AuthTokenResponseDto
+                {
+                    TokenId = createdToken.TokenId,
+                    UserId = createdToken.UserId,
+                    TokenType = Enum.Parse<TokenType>(createdToken.TokenType),
+                    TokenValue = createdToken.TokenValue,
+                    CreatedAt = createdToken.CreatedAt,
+                    ExpiresAt = createdToken.ExpiresAt,
+                    IsUsed = createdToken.IsUsed,
+                    UpdatedAt = createdToken.UpdatedAt
+                };
+
+                return CreatedAtAction(nameof(GetAuthToken), new { id = createdToken.TokenId }, new ApiResponse<AuthTokenResponseDto>(201, "Created", "Auth token created successfully.", data: createdDto));
             }
             catch (Exception ex)
             {

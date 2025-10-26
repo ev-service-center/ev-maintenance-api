@@ -40,5 +40,24 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 throw new Exception($"Failed to update auth token with ID {token.TokenId}.", ex);
             }
         }
+
+        public async Task<AuthToken> CreateAuthTokenAsync(AuthToken token)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                token.CreatedAt = DateTime.UtcNow;
+                token.UpdatedAt = DateTime.UtcNow;
+                _context.AuthTokens.Add(token);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return token;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception("Failed to create auth token.", ex);
+            }
+        }
     }
 }
