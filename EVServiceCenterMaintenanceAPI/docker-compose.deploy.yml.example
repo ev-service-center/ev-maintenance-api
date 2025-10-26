@@ -1,0 +1,99 @@
+version: "3.8"
+
+services:
+  # Azure SQL Edge Database
+  sqlserver:
+    image: mcr.microsoft.com/azure-sql-edge:latest
+    container_name: evservice-sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=${SA_PASSWORD}
+    ports:
+      - "1434:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+      - ./backups:/var/opt/mssql/backup
+    networks:
+      - evservice-network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: evservice-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./certbot/conf:/etc/letsencrypt
+    depends_on:
+      - backend
+    networks:
+      - evservice-network
+    restart: unless-stopped
+    command: '/bin/sh -c ''while :; do sleep 720h & wait $${!}; nginx -s reload; done & nginx -g "daemon off;"'''
+
+  # Certbot for SSL with Cloudflare DNS
+  certbot:
+    image: certbot/dns-cloudflare
+    container_name: evservice-certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/cloudflare.ini:/etc/letsencrypt/cloudflare.ini:ro
+    restart: unless-stopped
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+  # EV Service Center API
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: evservice-api
+    environment:
+      # ASP.NET Core
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:6868
+      
+      # Database
+      - ConnectionStrings__DefaultConnection=Server=${DB_SERVER};Database=${DB_NAME};User Id=${DB_USER};Password=${DB_PASSWORD};TrustServerCertificate=True;MultipleActiveResultSets=true
+      
+      # Redis
+      - ConnectionStrings__Redis=${REDIS_CONNECTION}
+      
+      # JWT
+      - Jwt__Key=${JWT_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
+      - Jwt__ExpiryMinutes=${JWT_EXPIRY_MINUTES}
+      - Jwt__RefreshTokenExpiryDays=${JWT_REFRESH_TOKEN_EXPIRY_DAYS}
+      
+      # Email
+      - EmailSettings__Server=${SMTP_SERVER}
+      - EmailSettings__Port=${SMTP_PORT}
+      - EmailSettings__Username=${SMTP_USERNAME}
+      - EmailSettings__Password=${SMTP_PASSWORD}
+      - EmailSettings__Sender=${SMTP_SENDER}
+      
+      # Application
+      - AppUrl=${APP_URL}
+    expose:
+      - "6868"
+    depends_on:
+      - sqlserver
+    networks:
+      - evservice-network
+    restart: unless-stopped
+    volumes:
+      - wwwroot_data:/app/wwwroot
+
+volumes:
+  sqlserver_data:
+    driver: local
+  wwwroot_data:
+    driver: local
+
+networks:
+  evservice-network:
+    driver: bridge
+
