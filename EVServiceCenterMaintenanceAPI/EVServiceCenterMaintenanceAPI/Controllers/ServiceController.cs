@@ -88,7 +88,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             if (!ModelState.IsValid)
             {
-                var errors = ModelState.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray());
+                var errors = ModelState
+                        .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
                 return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
             }
 
@@ -149,6 +151,39 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to delete service: {ex.Message}"));
+            }
+        }
+
+
+        [HttpGet]
+        [Authorize]
+        public async Task<IActionResult> GetAllServices([FromQuery] ServiceQueryParams queryParams)
+        {
+            try
+            {
+                var (services, total) = await _serviceDao.GetAllServicesAsync(queryParams);
+
+                var dtos = services.Select(s => new ServiceResponseDto
+                {
+                    ServiceId = s.ServiceId,
+                    ServiceName = s.ServiceName,
+                    Description = s.Description,
+                    BasePrice = s.BasePrice,
+                    EstimatedTime = s.EstimatedTime,
+                    Status = Enum.Parse<ServiceStatus>(s.Status),
+                    ReminderIntervalDays = s.ReminderIntervalDays ?? 0,
+                    ReminderMileage = s.ReminderMileage ?? 0,
+                    Notes = s.Notes,
+                    CreatedAt = s.CreatedAt,
+                    UpdatedAt = s.UpdatedAt
+                }).ToList();
+
+                var responseData = new { services = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
+                return Ok(new ApiResponse<object>(200, "Success", "Services retrieved successfully.", data: responseData));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to retrieve services: {ex.Message}"));
             }
         }
     }
