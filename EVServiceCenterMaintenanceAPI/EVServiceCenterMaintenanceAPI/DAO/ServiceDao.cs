@@ -14,6 +14,41 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             _context = context;
         }
 
+        public async Task<(List<Service> Services, int Total)> GetAllServicesAsync(ServiceQueryParams queryParams)
+        {
+            var validation = queryParams.Validate();
+            if (!validation.IsValid)
+            {
+                throw new ArgumentException(validation.ErrorMessage);
+            }
+
+            var query = _context.Services.AsNoTracking().AsQueryable();
+
+            // Apply filters
+            if (!string.IsNullOrEmpty(queryParams.Search))
+                query = query.Where(s => s.ServiceName.Contains(queryParams.Search) || (s.Description != null && s.Description.Contains(queryParams.Search)));
+
+            if (queryParams.StatusService.HasValue)
+                query = query.Where(s => s.Status == queryParams.StatusService.ToString());
+
+            if (queryParams.FromDate.HasValue)
+                query = query.Where(s => s.CreatedAt >= queryParams.FromDate.Value);
+
+            if (queryParams.ToDate.HasValue)
+                query = query.Where(s => s.CreatedAt <= queryParams.ToDate.Value);
+
+            // Apply sorting
+            query = ApplySorting(query, queryParams.SortBy, queryParams.SortOrder);
+
+            var total = await query.CountAsync();
+            var services = await query
+                .Skip((queryParams.Page - 1) * queryParams.PageSize)
+                .Take(queryParams.PageSize)
+                .ToListAsync();
+
+            return (services, total);
+        }
+
         public async Task<Service?> GetActiveServiceByIdAsync(int serviceId)
         {
             return await _context.Services
@@ -30,34 +65,21 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
             var query = _context.Services
                 .Where(s => s.Status == ServiceStatus.Active.ToString())
+                .AsNoTracking()
                 .AsQueryable();
 
+            // Apply filters
             if (!string.IsNullOrEmpty(queryParams.Search))
-                query = query.Where(s => s.ServiceName.Contains(queryParams.Search) || s.Description.Contains(queryParams.Search));
+                query = query.Where(s => s.ServiceName.Contains(queryParams.Search) || (s.Description != null && s.Description.Contains(queryParams.Search)));
+
             if (queryParams.FromDate.HasValue)
                 query = query.Where(s => s.CreatedAt >= queryParams.FromDate.Value);
+
             if (queryParams.ToDate.HasValue)
                 query = query.Where(s => s.CreatedAt <= queryParams.ToDate.Value);
 
-            if (!string.IsNullOrEmpty(queryParams.SortBy))
-            {
-                bool isAscending = queryParams.SortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase);
-                switch (queryParams.SortBy.ToLower())
-                {
-                    case "servicename":
-                        query = isAscending ? query.OrderBy(s => s.ServiceName) : query.OrderByDescending(s => s.ServiceName);
-                        break;
-                    case "baseprice":
-                        query = isAscending ? query.OrderBy(s => s.BasePrice) : query.OrderByDescending(s => s.BasePrice);
-                        break;
-                    case "createdat":
-                        query = isAscending ? query.OrderBy(s => s.CreatedAt) : query.OrderByDescending(s => s.CreatedAt);
-                        break;
-                    default:
-                        query = isAscending ? query.OrderBy(s => s.ServiceId) : query.OrderByDescending(s => s.ServiceId);
-                        break;
-                }
-            }
+            // Apply sorting
+            query = ApplySorting(query, queryParams.SortBy, queryParams.SortOrder);
 
             var total = await query.CountAsync();
             var services = await query
@@ -117,6 +139,22 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 await transaction.RollbackAsync();
                 throw new Exception($"Failed to delete service with ID {serviceId}.", ex);
             }
+        }
+
+        private static IQueryable<Service> ApplySorting(IQueryable<Service> query, string? sortBy, string sortOrder)
+        {
+            if (string.IsNullOrEmpty(sortBy))
+                return query.OrderBy(s => s.ServiceId);
+
+            bool isAscending = sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase);
+
+            return sortBy.ToLower() switch
+            {
+                "servicename" => isAscending ? query.OrderBy(s => s.ServiceName) : query.OrderByDescending(s => s.ServiceName),
+                "baseprice" => isAscending ? query.OrderBy(s => s.BasePrice) : query.OrderByDescending(s => s.BasePrice),
+                "createdat" => isAscending ? query.OrderBy(s => s.CreatedAt) : query.OrderByDescending(s => s.CreatedAt),
+                _ => isAscending ? query.OrderBy(s => s.ServiceId) : query.OrderByDescending(s => s.ServiceId)
+            };
         }
     }
 }
