@@ -14,6 +14,17 @@
 *.userosscache
 *.sln.docstates
 
+docker-compose.deploy.yml
+
+# SSL certificates
+certbot/
+
+# Database backups
+*.bak
+
+backups/*
+!backups/.gitkeep
+
 EVServiceCenterMaintenanceAPI/EVServiceCenterMaintenanceAPI/wwwroot/uploads/avatars/*
 !EVServiceCenterMaintenanceAPI/EVServiceCenterMaintenanceAPI/wwwroot/uploads/avatars/.gitkeep
 
