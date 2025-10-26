@@ -12,7 +12,7 @@ services:
       - "1434:1433"
     volumes:
       - sqlserver_data:/var/opt/mssql
-      - ./backups:/var/opt/mssql/backup
+      - ./backups:/var/backup
     networks:
       - evservice-network
     restart: unless-stopped

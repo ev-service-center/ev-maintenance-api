@@ -6,6 +6,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 data_path="$PROJECT_ROOT/certbot"
 
+# Load environment variables from .env file
+if [ -f "$PROJECT_ROOT/.env" ]; then
+  echo "?? Loading environment variables from .env file..."
+  export $(grep -v '^#' "$PROJECT_ROOT/.env" | xargs)
+  echo "? Environment variables loaded"
+else
+  echo "??  .env file not found, using default values"
+fi
+
 email="nvkhang0099@gmail.com" # Adding a valid address is strongly recommended
 staging=0 # Set to 1 if you're testing your setup to avoid hitting request limits
 
@@ -71,29 +80,41 @@ echo ""
 ## STEP 3: Start all services (sqlserver, backend, nginx)
 echo "### Starting SQL Server ..."
 docker compose -f "$PROJECT_ROOT/docker-compose.deploy.yml" up -d sqlserver
-echo "⏳ Waiting for SQL Server to be ready..."
+echo "? Waiting for SQL Server to be ready..."
 sleep 30
-echo "✅ SQL Server started"
+echo "? SQL Server started"
 echo ""
 
 echo "### Restoring database from backup ..."
+# Debug: Check if container can access backup file
+echo "?? Checking backup file access..."
+docker compose -f "$PROJECT_ROOT/docker-compose.deploy.yml" exec -T sqlserver ls -la /var/backup/ || echo "Cannot access backup directory"
+
 # Check if backup file exists
-if docker compose -f "$PROJECT_ROOT/docker-compose.deploy.yml" exec -T sqlserver test -f /var/opt/mssql/backup/EVServiceCenterDB.bak; then
+if docker compose -f "$PROJECT_ROOT/docker-compose.deploy.yml" exec -T sqlserver test -f /var/backup/EVServiceCenterDB.bak; then
+  echo "?? SA_PASSWORD: ${SA_PASSWORD}"
+  
+  # Test SQL Server connection first
+  echo "?? Testing SQL Server connection..."
   docker compose -f "$PROJECT_ROOT/docker-compose.deploy.yml" exec -T sqlserver /opt/mssql-tools/bin/sqlcmd \
-    -S localhost -U sa -P "${SA_PASSWORD}" \
-    -Q "RESTORE DATABASE EVServiceCenterDB FROM DISK = '/var/opt/mssql/backup/EVServiceCenterDB.bak' WITH REPLACE, MOVE 'EVServiceCenterDB' TO '/var/opt/mssql/data/EVServiceCenterDB.mdf', MOVE 'EVServiceCenterDB_log' TO '/var/opt/mssql/data/EVServiceCenterDB_log.ldf'"
+    -S localhost -U sa -P "${SA_PASSWORD:-YourStrongPassword123!}" \
+    -Q "SELECT 1" || echo "SQL Server connection failed"
+  
+  # Restore database
+  echo "?? Restoring database..."
+  docker compose -f "$PROJECT_ROOT/docker-compose.deploy.yml" exec -T sqlserver /opt/mssql-tools/bin/sqlcmd \
+    -S localhost -U sa -P "${SA_PASSWORD:-YourStrongPassword123!}" \
+    -Q "RESTORE DATABASE EVServiceCenterDB FROM DISK = '/var/backup/EVServiceCenterDB.bak' WITH REPLACE, MOVE 'EVServiceCenterDB' TO '/var/opt/mssql/data/EVServiceCenterDB.mdf', MOVE 'EVServiceCenterDB_log' TO '/var/opt/mssql/data/EVServiceCenterDB_log.ldf'"
   
   if [ $? -eq 0 ]; then
-    echo "✅ Database restored successfully"
+    echo "? Database restored successfully"
   else
-    echo "⚠️  Database restore failed or already exists"
+    echo "??  Database restore failed or already exists"
   fi
 else
-  echo "⚠️  No backup file found, skipping restore"
+  echo "??  No backup file found, skipping restore"
 fi
-echo ""
-
-echo "### Starting Backend API ..."
+echo ""echo "### Starting Backend API ..."
 docker compose -f "$PROJECT_ROOT/docker-compose.deploy.yml" up -d backend
 echo "✅ Backend API started"
 echo ""
@@ -105,15 +126,12 @@ echo ""
 
 ## STEP 4: Delete dummy certificate
 echo "### Deleting dummy certificate for ${domains[0]} ..."
-docker run --rm --entrypoint "\
+docker compose -f "$PROJECT_ROOT/docker-compose.deploy.yml" run --rm --entrypoint "\
   rm -Rf /etc/letsencrypt/live/${domains[0]} && \
   rm -Rf /etc/letsencrypt/archive/${domains[0]} && \
-  rm -Rf /etc/letsencrypt/renewal/${domains[0]}.conf" \
-  -v "$data_path/conf:/etc/letsencrypt" \
-  certbot/dns-cloudflare
-echo "✅ Dummy certificate deleted"
+  rm -Rf /etc/letsencrypt/renewal/${domains[0]}.conf" certbot
+echo "? Dummy certificate deleted"
 echo ""
-
 ## STEP 5: Request real Let's Encrypt certificate
 echo "### Requesting Let's Encrypt certificate for ${domains[@]} ..."
 
@@ -137,19 +155,17 @@ else
   staging_arg=""
 fi
 
-docker run --rm --entrypoint "\
+docker compose -f "$PROJECT_ROOT/docker-compose.deploy.yml" run --rm --entrypoint "\
   certbot certonly --dns-cloudflare \
     --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
+    --dns-cloudflare-propagation-seconds 30 \
     $staging_arg \
     $email_arg \
     $domain_args \
     --rsa-key-size $rsa_key_size \
     --agree-tos \
     --non-interactive \
-    --force-renewal" \
-  -v "$data_path/conf:/etc/letsencrypt" \
-  -v "$data_path/cloudflare.ini:/etc/letsencrypt/cloudflare.ini:ro" \
-  certbot/dns-cloudflare
+    --force-renewal" certbot
 
 if [ $? -eq 0 ]; then
   echo "✅ Real certificate obtained"
@@ -171,4 +187,3 @@ echo "Your site should now be accessible at:"
 echo "  https://${domains[0]}"
 echo ""
 echo "Certificate will auto-renew via certbot container."
-

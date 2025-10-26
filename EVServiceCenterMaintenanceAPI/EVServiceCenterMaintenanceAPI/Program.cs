@@ -206,5 +206,14 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+// Root endpoint
+app.MapGet("/", () => new
+{
+    status = "running",
+    message = "EV Service Center Maintenance API",
+    version = "v1",
+    documentation = "/swagger",
+});
+
 app.Run();
 
