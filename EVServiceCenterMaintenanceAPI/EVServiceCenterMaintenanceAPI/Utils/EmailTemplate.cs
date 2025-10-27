@@ -6,8 +6,15 @@ namespace EVServiceCenterMaintenanceAPI.Utils
 {
     public static class EmailTemplate
     {
+        private static DateTime GetVietNamTime(DateTime utcTime)
+        {
+            TimeZoneInfo timeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
+            DateTime vietnamTime = TimeZoneInfo.ConvertTimeFromUtc(utcTime, timeZoneInfo);
+            return vietnamTime;
+        }
         public static string GenerateActivationEmailTemplate(string userName, string activationLink, DateTime expiryDate)
         {
+            var vietnamExpiryDate = GetVietNamTime(expiryDate);
             return @"
 <!DOCTYPE html>
 <html lang='vi'>
@@ -65,7 +72,7 @@ namespace EVServiceCenterMaintenanceAPI.Utils
             <a href='" + activationLink + @"' class='action-button'>Kích hoạt tài khoản</a>
             <div class='expiry-info'>
                 <h3>Lưu ý quan trọng</h3>
-                <p>Liên kết kích hoạt này sẽ hết hạn vào lúc <strong>" + expiryDate.ToString("dd/MM/yyyy HH:mm:ss") + @"</strong>. Vui lòng kích hoạt tài khoản của bạn ngay lập tức.</p>
+                <p>Liên kết kích hoạt này sẽ hết hạn vào lúc <strong>" + vietnamExpiryDate.ToString("dd/MM/yyyy HH:mm:ss") + @"</strong>. Vui lòng kích hoạt tài khoản của bạn ngay lập tức.</p>
             </div>
             <div class='security-notice'>
                 <h3>Thông báo bảo mật</h3>
@@ -85,6 +92,7 @@ namespace EVServiceCenterMaintenanceAPI.Utils
 
         public static string GenerateOtpEmailTemplate(string userName, string otpCode, DateTime expiryDate)
         {
+            var vietnamExpiryDate = GetVietNamTime(expiryDate);
             return @"
 <!DOCTYPE html>
 <html lang='vi'>
@@ -146,7 +154,7 @@ namespace EVServiceCenterMaintenanceAPI.Utils
             </div>
             <div class='expiry-info'>
                 <h3>Lưu ý quan trọng</h3>
-                <p>Mã OTP này sẽ hết hạn vào lúc <strong>" + expiryDate.ToString("dd/MM/yyyy HH:mm:ss") + @"</strong>. Vui lòng hoàn tất việc đặt lại mật khẩu ngay lập tức.</p>
+                <p>Mã OTP này sẽ hết hạn vào lúc <strong>" + vietnamExpiryDate.ToString("dd/MM/yyyy HH:mm:ss") + @"</strong>. Vui lòng hoàn tất việc đặt lại mật khẩu ngay lập tức.</p>
             </div>
             <div class='security-notice'>
                 <h3>Thông báo bảo mật</h3>
@@ -172,7 +180,7 @@ namespace EVServiceCenterMaintenanceAPI.Utils
             string phone = user.Phone ?? "N/A";
             string role = user.Role.ToString();
             string status = user.Status.ToString();
-            string createdAt = user.CreatedAt.ToString("dd/MM/yyyy HH:mm");
+            string createdAt = GetVietNamTime(user.CreatedAt).ToString("dd/MM/yyyy HH:mm");
 
             return @"
 <!DOCTYPE html>
