@@ -12,6 +12,11 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             _context = context ?? throw new ArgumentNullException(nameof(context));
         }
 
+        public Task<bool> IsExistServiceCenterAsync(int serviceCenterId)
+        {
+            return _context.ServiceCenters.AnyAsync(s => s.CenterId == serviceCenterId);
+        }
+
         public async Task<ServiceCenter> CreateServiceCenterAsync(ServiceCenter center)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();

@@ -89,6 +89,7 @@ builder.Services.AddScoped<AuthTokenDao>();
 builder.Services.AddScoped<ServiceDao>();
 builder.Services.AddScoped<PartDao>();
 builder.Services.AddScoped<ServiceCenterDao>();
+builder.Services.AddScoped<EmployeeDao>();
 
 
 builder.Services.AddScoped<ITokenBlacklistService, TokenBlacklistService>();
@@ -198,7 +199,7 @@ if (!Directory.Exists(webRootPath))
 
 app.UseStaticFiles();
 
-app.UseCors();
+app.UseCors("Frontend");
 
 app.UseHttpsRedirection();
 

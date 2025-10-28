@@ -504,7 +504,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 if (requireAdmin && user.Role != UserRole.Admin.ToString())
                     return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<object>(403, "Forbidden", "Account is not authorized to login here."));
 
-                var deviceHash = HashDeviceInfo(Request.Headers["User-Agent"].ToString() + HttpContext.Connection.RemoteIpAddress?.ToString());
+                var deviceHash = HashDeviceInfo(Request.Headers["User-Agent"].ToString());
                 var roles = new List<string> { user.Role };
                 var accessToken = GenerateJwtToken(user, roles, deviceHash);
                 var refreshTokenResult = GenerateRefreshTokenAsync(user);

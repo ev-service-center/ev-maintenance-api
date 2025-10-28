@@ -67,6 +67,12 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     return BadRequest(new ApiResponse<object>(400, "BadRequest", "Invalid role."));
                 }
 
+                // Prevent Staff from creating Admin users
+                if (User.IsInRole(UserRole.Staff.ToString()) && userDto.Role == UserRole.Admin)
+                {
+                    return StatusCode(403, new ApiResponse<object>(403, "Forbidden", "Staff cannot create Admin users."));
+                }
+
                 var randomPassword = GenerateRandomPassword();
                 var user = new User
                 {
@@ -143,6 +149,18 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             try
             {
+                // Guard: withoutEmployee only makes sense for Staff/Technician and requires role
+                if (queryParams.WithoutEmployee == true && queryParams.Role.HasValue)
+                {
+                    if (queryParams.Role != UserRole.Staff && queryParams.Role != UserRole.Technician)
+                    {
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", "withoutEmployee is only valid for Staff or Technician roles."));
+                    }
+                }
+                else if (queryParams.WithoutEmployee == true && !queryParams.Role.HasValue)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "role is required when withoutEmployee is true (Staff or Technician)."));
+                }
                 //tuple type
                 var (users, total) = await _userDao.GetAllUsersAsync(queryParams);
 

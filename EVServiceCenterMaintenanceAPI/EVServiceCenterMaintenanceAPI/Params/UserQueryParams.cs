@@ -6,6 +6,7 @@ namespace EVServiceCenterMaintenanceAPI.Params
     {
         public UserRole? Role { get; set; }
         public UserStatus? StatusUser { get; set; }
+        public bool? WithoutEmployee { get; set; }
 
         public override (bool IsValid, string ErrorMessage) Validate()
         {
