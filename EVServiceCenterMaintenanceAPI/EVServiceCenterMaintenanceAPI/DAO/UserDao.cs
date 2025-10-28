@@ -141,6 +141,11 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             if (queryParams.ToDate.HasValue)
                 query = query.Where(u => u.CreatedAt <= queryParams.ToDate.Value);
 
+            if (queryParams.WithoutEmployee == true)
+            {
+                query = query.Where(u => !_context.Employees.Any(e => e.EmployeeId == u.UserId));
+            }
+
             if (!string.IsNullOrEmpty(queryParams.SortBy))
             {
                 bool isAscending = queryParams.SortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase);
