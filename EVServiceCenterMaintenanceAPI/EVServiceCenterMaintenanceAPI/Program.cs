@@ -88,6 +88,7 @@ builder.Services.AddScoped<VehicleDao>();
 builder.Services.AddScoped<AuthTokenDao>();
 builder.Services.AddScoped<ServiceDao>();
 builder.Services.AddScoped<PartDao>();
+builder.Services.AddScoped<ServiceCenterDao>();
 
 
 builder.Services.AddScoped<ITokenBlacklistService, TokenBlacklistService>();
