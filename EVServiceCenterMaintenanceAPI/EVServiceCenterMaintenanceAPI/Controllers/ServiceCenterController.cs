@@ -47,5 +47,48 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to retrieve service center: {ex.Message}"));
             }
         }
+
+        [HttpPost]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> CreateServiceCenter([FromBody] ServiceCenterCreateRequestDto dto)
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState.ToDictionary(kvp => kvp.Key, kvp => kvp.Value!.Errors.Select(e => e.ErrorMessage).ToArray());
+                return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+            }
+
+            try
+            {
+                var center = new ServiceCenter
+                {
+                    CenterName = dto.CenterName,
+                    Address = dto.Address,
+                    Phone = dto.Phone,
+                    Email = dto.Email,
+                    Status = dto.Status.ToString()
+                };
+
+                var createdCenter = await _serviceCenterDao.CreateServiceCenterAsync(center);
+                var createdDto = new ServiceCenterResponseDto
+                {
+                    CenterId = createdCenter.CenterId,
+                    CenterName = createdCenter.CenterName,
+                    Address = createdCenter.Address,
+                    Phone = createdCenter.Phone,
+                    Email = createdCenter.Email,
+                    Status = Enum.Parse<ServiceCenterStatus>(createdCenter.Status),
+                    CreatedAt = createdCenter.CreatedAt,
+                    UpdatedAt = createdCenter.UpdatedAt
+                };
+
+                return CreatedAtAction(nameof(GetServiceCenter), new { id = createdCenter.CenterId }, new ApiResponse<ServiceCenterResponseDto>(
+                    201, "Created", "Service center created successfully.", data: createdDto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to create service center: {ex.Message}"));
+            }
+        }
     }
 }
