@@ -14,6 +14,11 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             _context = context;
         }
 
+        public Task<bool> IsExistServiceCenterAsync(int serviceCenterId)
+        {
+            return _context.ServiceCenters.AnyAsync(s => s.CenterId == serviceCenterId);
+        }
+
         public async Task<(List<Service> Services, int Total)> GetAllServicesAsync(ServiceQueryParams queryParams)
         {
             var validation = queryParams.Validate();
