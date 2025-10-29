@@ -18,6 +18,78 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             _partDao = partDao;
         }
 
+        [HttpPost]
+        [Authorize(Roles = "Staff,Admin")]
+        public async Task<IActionResult> CreatePart([FromBody] PartCreateRequestDto dto)
+        {
+            try
+            {
+                var part = new Part
+                {
+                    PartName = dto.PartName,
+                    Description = dto.Description,
+                    Price = dto.Price,
+                    QuantityInStock = dto.QuantityInStock,
+                    MinStock = dto.MinStock,
+                    CenterId = dto.CenterId,
+                    Status = dto.Status.ToString()
+                };
+
+                var createdPart = await _partDao.CreatePartAsync(part);
+                var createdDto = new PartResponseDto
+                {
+                    PartId = createdPart.PartId,
+                    PartName = createdPart.PartName,
+                    Description = createdPart.Description,
+                    Price = createdPart.Price,
+                    QuantityInStock = createdPart.QuantityInStock.Value,
+                    MinStock = createdPart.MinStock.Value,
+                    CenterId = createdPart.CenterId,
+                    Status = Enum.Parse<PartStatus>(createdPart.Status),
+                    CreatedAt = createdPart.CreatedAt,
+                    UpdatedAt = createdPart.UpdatedAt
+                };
+
+                return CreatedAtAction(nameof(GetPart), new { id = createdPart.PartId }, new ApiResponse<PartResponseDto>(201, "Created", "Part created successfully.", data: createdDto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpGet("{id}")]
+        [Authorize(Roles = "Staff,Technician,Admin")]
+        public async Task<IActionResult> GetPart(int id)
+        {
+            try
+            {
+                var part = await _partDao.GetPartByIdAsync(id);
+                if (part == null)
+                    return NotFound(new ApiResponse<PartResponseDto>(404, "NotFound", "Part not found."));
+
+                var dto = new PartResponseDto
+                {
+                    PartId = part.PartId,
+                    PartName = part.PartName,
+                    Description = part.Description,
+                    Price = part.Price,
+                    QuantityInStock = part.QuantityInStock.Value,
+                    MinStock = part.MinStock.Value,
+                    CenterId = part.CenterId,
+                    Status = Enum.Parse<PartStatus>(part.Status),
+                    CreatedAt = part.CreatedAt,
+                    UpdatedAt = part.UpdatedAt
+                };
+
+                return Ok(new ApiResponse<PartResponseDto>(200, "Success", "Part retrieved successfully.", data: dto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
         [HttpGet("suggestions")]
         [Authorize(Roles = "Staff,Admin")]
         public async Task<IActionResult> GetPartReorderSuggestions([FromQuery] int centerId)
