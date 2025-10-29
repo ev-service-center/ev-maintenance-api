@@ -14,6 +14,30 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             _context = context;
         }
 
+        public async Task<Service> CreateServiceAsync(Service service)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                service.CreatedAt = DateTime.UtcNow;
+                service.UpdatedAt = DateTime.UtcNow;
+                _context.Services.Add(service);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return service;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception("Failed to create service.", ex);
+            }
+        }
+
+        public async Task<Service?> GetServiceByIdAsync(int serviceId)
+        {
+            return await _context.Services.FirstOrDefaultAsync(s => s.ServiceId == serviceId);
+        }
+
         public async Task<(List<Service> Services, int Total)> GetAllServicesAsync(ServiceQueryParams queryParams)
         {
             var validation = queryParams.Validate();
