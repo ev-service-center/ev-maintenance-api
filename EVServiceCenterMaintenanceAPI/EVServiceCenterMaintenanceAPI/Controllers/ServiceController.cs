@@ -19,6 +19,90 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             _serviceDao = serviceDao ?? throw new ArgumentNullException(nameof(serviceDao));
         }
 
+        [HttpPost]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> CreateService([FromBody] ServiceCreateRequestDto dto)
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState
+                        .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
+                return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+            }
+
+            try
+            {
+                var service = new Service
+                {
+                    ServiceName = dto.ServiceName,
+                    Description = dto.Description,
+                    BasePrice = dto.BasePrice,
+                    EstimatedTime = dto.EstimatedTime,
+                    Status = dto.Status.ToString(),
+                    ReminderIntervalDays = dto.ReminderIntervalDays,
+                    ReminderMileage = dto.ReminderMileage,
+                    Notes = dto.Notes
+                };
+
+                var createdService = await _serviceDao.CreateServiceAsync(service);
+                var createdDto = new ServiceResponseDto
+                {
+                    ServiceId = createdService.ServiceId,
+                    ServiceName = createdService.ServiceName,
+                    Description = createdService.Description,
+                    BasePrice = createdService.BasePrice,
+                    EstimatedTime = createdService.EstimatedTime,
+                    Status = Enum.Parse<ServiceStatus>(createdService.Status),
+                    ReminderIntervalDays = createdService.ReminderIntervalDays.Value,
+                    ReminderMileage = createdService.ReminderMileage.Value,
+                    Notes = createdService.Notes,
+                    CreatedAt = createdService.CreatedAt,
+                    UpdatedAt = createdService.UpdatedAt
+                };
+
+                return CreatedAtAction(nameof(GetService), new { id = createdService.ServiceId }, new ApiResponse<ServiceResponseDto>(
+                    201, "Created", "Service created successfully.", data: createdDto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to create service: {ex.Message}"));
+            }
+        }
+
+        [HttpGet("{id}")]
+        [Authorize(Roles = "Customer,Staff,Technician,Admin")]
+        public async Task<IActionResult> GetService(int id)
+        {
+            try
+            {
+                var service = await _serviceDao.GetServiceByIdAsync(id);
+                if (service == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "Service not found."));
+
+                var dto = new ServiceResponseDto
+                {
+                    ServiceId = service.ServiceId,
+                    ServiceName = service.ServiceName,
+                    Description = service.Description,
+                    BasePrice = service.BasePrice,
+                    EstimatedTime = service.EstimatedTime,
+                    Status = Enum.Parse<ServiceStatus>(service.Status),
+                    ReminderIntervalDays = service.ReminderIntervalDays.Value,
+                    ReminderMileage = service.ReminderMileage.Value,
+                    Notes = service.Notes,
+                    CreatedAt = service.CreatedAt,
+                    UpdatedAt = service.UpdatedAt
+                };
+
+                return Ok(new ApiResponse<ServiceResponseDto>(200, "Success", "Service retrieved successfully.", data: dto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to retrieve service: {ex.Message}"));
+            }
+        }
+
         [HttpGet("active/{id}")]
         public async Task<IActionResult> GetActiveService(int id)
         {
