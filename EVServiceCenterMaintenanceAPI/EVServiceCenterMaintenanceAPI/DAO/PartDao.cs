@@ -13,6 +13,30 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             _context = context;
         }
 
+        public async Task<Part> CreatePartAsync(Part part)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                part.CreatedAt = DateTime.UtcNow;
+                part.UpdatedAt = DateTime.UtcNow;
+                _context.Parts.Add(part);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return part;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception("Failed to create part.", ex);
+            }
+        }
+
+        public async Task<Part?> GetPartByIdAsync(int partId)
+        {
+            return await _context.Parts.FirstOrDefaultAsync(p => p.PartId == partId);
+        }
+
         public async Task<List<PartSuggestionDto>> GetPartReorderSuggestionsAsync(int centerId)
         {
             var parts = await _context.Parts
