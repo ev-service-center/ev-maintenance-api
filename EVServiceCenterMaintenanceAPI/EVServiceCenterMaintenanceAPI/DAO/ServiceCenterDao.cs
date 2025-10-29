@@ -86,5 +86,27 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
             return (centers, total);
         }
+
+        public async Task<bool> DeleteServiceCenterAsync(int centerId)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var center = await _context.ServiceCenters.FindAsync(centerId);
+                if (center == null)
+                    return false;
+
+                _context.ServiceCenters.Remove(center);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception($"Failed to delete service center with ID {centerId}: {ex.Message}", ex);
+            }
+        }
+
     }
 }

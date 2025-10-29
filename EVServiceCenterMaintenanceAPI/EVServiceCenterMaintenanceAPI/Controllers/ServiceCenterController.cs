@@ -120,5 +120,23 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to retrieve service centers: {ex.Message}"));
             }
         }
+
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> DeleteServiceCenter(int id)
+        {
+            try
+            {
+                var success = await _serviceCenterDao.DeleteServiceCenterAsync(id);
+                if (!success)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "Service center not found."));
+
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to delete service center: {ex.Message}"));
+            }
+        }
     }
 }
