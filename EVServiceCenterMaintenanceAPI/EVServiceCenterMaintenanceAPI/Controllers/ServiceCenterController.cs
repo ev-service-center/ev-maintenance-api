@@ -2,6 +2,7 @@
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Enums;
 using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -88,6 +89,53 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to create service center: {ex.Message}"));
+            }
+        }
+
+        [HttpGet]
+        [Authorize(Roles = "Staff,Admin")]
+        public async Task<IActionResult> GetAllServiceCenters([FromQuery] ServiceCenterQueryParams queryParams)
+        {
+            try
+            {
+                var (centers, total) = await _serviceCenterDao.GetAllServiceCentersAsync(queryParams);
+
+                var dtos = centers.Select(c => new ServiceCenterResponseDto
+                {
+                    CenterId = c.CenterId,
+                    CenterName = c.CenterName,
+                    Address = c.Address,
+                    Phone = c.Phone,
+                    Email = c.Email,
+                    Status = Enum.Parse<ServiceCenterStatus>(c.Status),
+                    CreatedAt = c.CreatedAt,
+                    UpdatedAt = c.UpdatedAt
+                }).ToList();
+
+                var responseData = new { centers = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
+                return Ok(new ApiResponse<object>(200, "Success", "Service centers retrieved successfully.", data: responseData));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to retrieve service centers: {ex.Message}"));
+            }
+        }
+
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> DeleteServiceCenter(int id)
+        {
+            try
+            {
+                var success = await _serviceCenterDao.DeleteServiceCenterAsync(id);
+                if (!success)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "Service center not found."));
+
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to delete service center: {ex.Message}"));
             }
         }
     }
