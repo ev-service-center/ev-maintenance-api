@@ -15,7 +15,7 @@ public partial class Vehicle
 
     public int? ManufactureYear { get; set; }
 
-    public decimal? CurrentMileage { get; set; } 
+    public decimal? CurrentMileage { get; set; }
 
     public DateTime? LastMaintenanceDate { get; set; }
 

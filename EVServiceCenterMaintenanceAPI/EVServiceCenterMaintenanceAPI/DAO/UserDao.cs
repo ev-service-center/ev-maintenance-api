@@ -121,15 +121,21 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             return user;
         }
 
-        public async Task<(List<User> Users, int Total)> GetAllUsersAsync(UserQueryParams queryParams)
+        public async Task<(List<User> Users, int Total)> GetAllUsersAsync(UserQueryParams queryParams, HashSet<int>? centerUserIds = null)
         {
-            var validation = queryParams.Validate();
-            if (!validation.IsValid)
+            var (IsValid, ErrorMessage) = queryParams.Validate();
+            if (!IsValid)
             {
-                throw new ArgumentException(validation.ErrorMessage);
+                throw new ArgumentException(ErrorMessage);
             }
 
             var query = _context.Users.AsQueryable();
+
+            if (centerUserIds != null)
+            {
+                query = query.Where(u => u.Role != "Admin");
+            }
+
             if (!string.IsNullOrEmpty(queryParams.Search))
                 query = query.Where(u => u.Username.Contains(queryParams.Search) || u.FullName.Contains(queryParams.Search) || u.Email.Contains(queryParams.Search));
             if (queryParams.Role.HasValue)
@@ -146,28 +152,14 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 query = query.Where(u => !_context.Employees.Any(e => e.EmployeeId == u.UserId));
             }
 
-            if (!string.IsNullOrEmpty(queryParams.SortBy))
+            if (centerUserIds != null)
             {
-                bool isAscending = queryParams.SortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase);
-                switch (queryParams.SortBy.ToLower())
-                {
-                    case "username":
-                        query = isAscending ? query.OrderBy(u => u.Username) : query.OrderByDescending(u => u.Username);
-                        break;
-                    case "fullname":
-                        query = isAscending ? query.OrderBy(u => u.FullName) : query.OrderByDescending(u => u.FullName);
-                        break;
-                    case "email":
-                        query = isAscending ? query.OrderBy(u => u.Email) : query.OrderByDescending(u => u.Email);
-                        break;
-                    case "createdat":
-                        query = isAscending ? query.OrderBy(u => u.CreatedAt) : query.OrderByDescending(u => u.CreatedAt);
-                        break;
-                    default:
-                        query = isAscending ? query.OrderBy(u => u.UserId) : query.OrderByDescending(u => u.UserId);
-                        break;
-                }
+                query = query.Where(u =>
+                    u.Role != UserRole.Staff.ToString() && u.Role != UserRole.Technician.ToString() || centerUserIds.Contains(u.UserId) // Customer và các role khác (không filter theo center)
+                );
             }
+
+            query = ApplySorting(query, queryParams.SortBy, queryParams.SortOrder);
 
             var total = await query.CountAsync();
             var users = await query
@@ -192,6 +184,66 @@ namespace EVServiceCenterMaintenanceAPI.DAO
         public async Task<List<User>> GetUsersByRoleAsync(UserRole role)
         {
             return await _context.Users.Where(u => u.Role == role.ToString()).ToListAsync();
+        }
+
+        public async Task<(List<User> Users, int Total)> GetUsersByRoleAsync(UserRole role, UserRoleQueryParams queryParams, HashSet<int>? centerUserIds = null)
+        {
+            var (IsValid, ErrorMessage) = queryParams.Validate();
+            if (!IsValid)
+            {
+                throw new ArgumentException(ErrorMessage);
+            }
+
+            var query = _context.Users.Where(u => u.Role == role.ToString());
+
+            if (centerUserIds != null && role == UserRole.Admin)
+            {
+                query = query.Where(u => false); // Always false, không có kết quả
+            }
+
+            if (!string.IsNullOrEmpty(queryParams.Search))
+                query = query.Where(u => u.Username.Contains(queryParams.Search) || u.FullName.Contains(queryParams.Search) || u.Email.Contains(queryParams.Search));
+
+            if (queryParams.StatusUser.HasValue)
+                query = query.Where(u => u.Status == queryParams.StatusUser.ToString());
+
+            if (queryParams.FromDate.HasValue)
+                query = query.Where(u => u.CreatedAt >= queryParams.FromDate.Value);
+
+            if (queryParams.ToDate.HasValue)
+                query = query.Where(u => u.CreatedAt <= queryParams.ToDate.Value);
+
+            if (centerUserIds != null && (role == UserRole.Staff || role == UserRole.Technician))
+            {
+                query = query.Where(u => centerUserIds.Contains(u.UserId));
+            }
+
+            query = ApplySorting(query, queryParams.SortBy, queryParams.SortOrder);
+
+            var total = await query.CountAsync();
+            var users = await query
+                .Skip((queryParams.Page - 1) * queryParams.PageSize)
+                .Take(queryParams.PageSize)
+                .ToListAsync();
+
+            return (users, total);
+        }
+
+        private static IQueryable<User> ApplySorting(IQueryable<User> query, string? sortBy, string sortOrder)
+        {
+            if (sortBy == null || string.IsNullOrWhiteSpace(sortBy))
+                return query.OrderBy(u => u.UserId);
+
+            bool isAscending = sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase);
+
+            return sortBy.ToLower() switch
+            {
+                "username" => isAscending ? query.OrderBy(u => u.Username) : query.OrderByDescending(u => u.Username),
+                "fullname" => isAscending ? query.OrderBy(u => u.FullName) : query.OrderByDescending(u => u.FullName),
+                "email" => isAscending ? query.OrderBy(u => u.Email) : query.OrderByDescending(u => u.Email),
+                "createdat" => isAscending ? query.OrderBy(u => u.CreatedAt) : query.OrderByDescending(u => u.CreatedAt),
+                _ => isAscending ? query.OrderBy(u => u.UserId) : query.OrderByDescending(u => u.UserId)
+            };
         }
     }
 }

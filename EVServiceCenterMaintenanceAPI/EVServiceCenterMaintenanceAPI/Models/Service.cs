@@ -29,5 +29,7 @@ public partial class Service
 
     public virtual ICollection<AppointmentService> AppointmentServices { get; set; } = new List<AppointmentService>();
 
+    public virtual ICollection<MaintenanceHistory> MaintenanceHistories { get; set; } = new List<MaintenanceHistory>();
+
     public virtual ICollection<Reminder> Reminders { get; set; } = new List<Reminder>();
 }

@@ -27,6 +27,8 @@ public partial class Appointment
 
     public DateTime UpdatedAt { get; set; }
 
+    public decimal? Amount { get; set; }
+
     public virtual User? AssignedTechnician { get; set; }
 
     public virtual ServiceCenter Center { get; set; } = null!;

@@ -25,7 +25,11 @@ public partial class MaintenanceHistory
 
     public DateTime UpdatedAt { get; set; }
 
+    public int? ServiceId { get; set; }
+
     public virtual ICollection<PartUsage> PartUsages { get; set; } = new List<PartUsage>();
+
+    public virtual Service? Service { get; set; }
 
     public virtual Vehicle Vehicle { get; set; } = null!;
 
