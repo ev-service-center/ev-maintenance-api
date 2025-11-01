@@ -19,7 +19,7 @@ public partial class AppointmentSlot
 
     public DateTime UpdatedAt { get; set; }
 
-    public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
+    public virtual Appointment? Appointment { get; set; }
 
     public virtual ServiceCenter Center { get; set; } = null!;
 }
