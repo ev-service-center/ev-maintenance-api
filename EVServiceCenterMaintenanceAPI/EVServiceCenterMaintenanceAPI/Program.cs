@@ -186,10 +186,10 @@ builder.Services.AddAuthorizationBuilder()
 
 var app = builder.Build();
 
-//Seed Admin user on startup
+//Seed all necessary data on startup
 using (var scope = app.Services.CreateScope())
 {
-    await DatabaseSeeder.SeedAdminUserAsync(scope.ServiceProvider);
+    await DatabaseSeeder.SeedAllAsync(scope.ServiceProvider);
 }
 
 // Configure the HTTP request pipeline.

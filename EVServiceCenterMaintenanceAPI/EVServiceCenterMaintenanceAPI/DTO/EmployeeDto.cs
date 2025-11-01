@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using EVServiceCenterMaintenanceAPI.Enums;
 
 namespace EVServiceCenterMaintenanceAPI.DTO
 {
@@ -11,6 +12,19 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         public string? Certificate { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+        public EmployeeUserInfoDto? User { get; set; }
+    }
+
+    public class EmployeeUserInfoDto
+    {
+        public int UserId { get; set; }
+        public string Username { get; set; } = null!;
+        public string FullName { get; set; } = null!;
+        public string Email { get; set; } = null!;
+        public string? Phone { get; set; }
+        public UserRole Role { get; set; }
+        public UserStatus Status { get; set; }
+        public string? Avatar { get; set; }
     }
 
     public class EmployeeCreateRequestDto
