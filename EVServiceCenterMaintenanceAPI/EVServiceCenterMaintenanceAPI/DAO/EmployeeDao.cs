@@ -1,4 +1,5 @@
 ﻿using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.EntityFrameworkCore;
 
 namespace EVServiceCenterMaintenanceAPI.DAO
@@ -36,6 +37,56 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 .Include(e => e.EmployeeNavigation)
                 .Include(e => e.Center)
                 .FirstOrDefaultAsync(e => e.EmployeeId == employeeId);
+        }
+
+        public async Task<(List<Employee> Employees, int Total)> GetAllEmployeesAsync(EmployeeQueryParams queryParams)
+        {
+            var (IsValid, ErrorMessage) = queryParams.Validate();
+            if (!IsValid)
+            {
+                throw new ArgumentException(ErrorMessage);
+            }
+
+            var query = _context.Employees
+                .Include(e => e.EmployeeNavigation)
+                .Include(e => e.Center)
+                .AsQueryable();
+
+            if (!string.IsNullOrEmpty(queryParams.Search))
+            {
+                query = query.Where(e =>
+                    e.EmployeeNavigation.FullName.Contains(queryParams.Search) ||
+                    (e.Shift != null && e.Shift.Contains(queryParams.Search)));
+            }
+
+            if (queryParams.CenterId.HasValue)
+                query = query.Where(e => e.CenterId == queryParams.CenterId.Value);
+
+            if (queryParams.FromDate.HasValue)
+                query = query.Where(e => e.CreatedAt >= queryParams.FromDate.Value);
+
+            if (queryParams.ToDate.HasValue)
+                query = query.Where(e => e.CreatedAt <= queryParams.ToDate.Value);
+
+            if (!string.IsNullOrEmpty(queryParams.SortBy))
+            {
+                bool isAscending = queryParams.SortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase);
+                query = queryParams.SortBy.ToLower() switch
+                {
+                    "shift" => isAscending ? query.OrderBy(e => e.Shift) : query.OrderByDescending(e => e.Shift),
+                    "performancescore" => isAscending ? query.OrderBy(e => e.PerformanceScore) : query.OrderByDescending(e => e.PerformanceScore),
+                    "createdat" => isAscending ? query.OrderBy(e => e.CreatedAt) : query.OrderByDescending(e => e.CreatedAt),
+                    _ => isAscending ? query.OrderBy(e => e.EmployeeId) : query.OrderByDescending(e => e.EmployeeId),
+                };
+            }
+
+            var total = await query.CountAsync();
+            var employees = await query
+                .Skip((queryParams.Page - 1) * queryParams.PageSize)
+                .Take(queryParams.PageSize)
+                .ToListAsync();
+
+            return (employees, total);
         }
     }
 }

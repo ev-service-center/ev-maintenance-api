@@ -2,6 +2,7 @@
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Enums;
 using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -70,7 +71,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     UpdatedAt = createdEmployee.UpdatedAt
                 };
 
-                return CreatedAtAction(nameof(GetEmployee), new { id = createdEmployee.EmployeeId }, new ApiResponse<EmployeeResponseDto>(201, "Created", "Employee created successfully.", data: createdDto));
+                return CreatedAtAction(nameof(GetEmployeeById), new { id = createdEmployee.EmployeeId }, new ApiResponse<EmployeeResponseDto>(201, "Created", "Employee created successfully.", data: createdDto));
             }
             catch (Exception ex)
             {
@@ -80,13 +81,31 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 
         [HttpGet("{id}")]
         [Authorize(Roles = "Staff,Admin")]
-        public async Task<IActionResult> GetEmployee(int id)
+        public async Task<IActionResult> GetEmployeeById(int id)
         {
             try
             {
+                var userIdClaim = User.FindFirst("UserId")?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                var currentUser = await _userDao.GetUserByIdAsync(currentUserId);
+                if (currentUser == null)
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "User not found."));
+
                 var employee = await _employeeDao.GetEmployeeByIdAsync(id);
                 if (employee == null)
                     return NotFound(new ApiResponse<EmployeeResponseDto>(404, "NotFound", "Employee not found."));
+
+                if (currentUser.Role == UserRole.Staff.ToString())
+                {
+                    var currentEmployee = await _employeeDao.GetEmployeeByIdAsync(currentUserId);
+                    if (currentEmployee == null)
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", "Staff user does not have an associated employee record."));
+
+                    if (currentEmployee.CenterId != employee.CenterId)
+                        return StatusCode(403, new ApiResponse<object>(403, "Forbidden", "Staff can only view employees in their own service center."));
+                }
 
                 var dto = new EmployeeResponseDto
                 {
@@ -100,6 +119,54 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 };
 
                 return Ok(new ApiResponse<EmployeeResponseDto>(200, "Success", "Employee retrieved successfully.", data: dto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpGet]
+        [Authorize(Roles = "Staff,Admin")]
+        public async Task<IActionResult> GetAllEmployees([FromQuery] EmployeeQueryParams queryParams)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst("UserId")?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                var currentUser = await _userDao.GetUserByIdAsync(currentUserId);
+                if (currentUser == null)
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "User not found."));
+
+                if (currentUser.Role == UserRole.Staff.ToString())
+                {
+                    var currentEmployee = await _employeeDao.GetEmployeeByIdAsync(currentUserId);
+                    if (currentEmployee == null)
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", "Staff user does not have an associated employee record."));
+                    queryParams.CenterId = currentEmployee.CenterId;
+                }
+
+                var (employees, total) = await _employeeDao.GetAllEmployeesAsync(queryParams);
+
+                var dtos = employees.Select(e => new EmployeeResponseDto
+                {
+                    EmployeeId = e.EmployeeId,
+                    CenterId = e.CenterId,
+                    Shift = e.Shift,
+                    PerformanceScore = e.PerformanceScore ?? 0m,
+                    Certificate = e.Certificate,
+                    CreatedAt = e.CreatedAt,
+                    UpdatedAt = e.UpdatedAt
+                }).ToList();
+
+                var responseData = new { employees = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
+                return Ok(new ApiResponse<object>(200, "Success", "Employees retrieved successfully.", data: responseData));
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new ApiResponse<object>(400, "BadRequest", ex.Message));
             }
             catch (Exception ex)
             {

@@ -16,6 +16,14 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
+// Configure logging
+builder.Services.AddLogging(builder =>
+{
+    builder.AddConsole();
+    builder.AddDebug();
+    builder.SetMinimumLevel(LogLevel.Information);
+});
+
 builder.Services.AddControllers().ConfigureApiBehaviorOptions(configure =>
 {
     configure.SuppressModelStateInvalidFilter = true;
@@ -209,13 +217,13 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Root endpoint
-app.MapGet("/", () => new
+app.MapGet("/test", (HttpContext ctx) =>
 {
-    status = "running",
-    message = "EV Service Center Maintenance API",
-    version = "v1",
-    documentation = "/swagger",
+    return new
+    {
+        remoteIp = ctx.Connection.RemoteIpAddress?.ToString(),
+        xForwardedFor = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()
+    };
 });
 
 app.Run();
