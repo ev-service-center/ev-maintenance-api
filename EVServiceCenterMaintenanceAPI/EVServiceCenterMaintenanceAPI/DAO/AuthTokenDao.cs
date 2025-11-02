@@ -1,4 +1,5 @@
 ﻿using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.EntityFrameworkCore;
 
 namespace EVServiceCenterMaintenanceAPI.DAO
@@ -58,6 +59,50 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 await transaction.RollbackAsync();
                 throw new Exception("Failed to create auth token.", ex);
             }
+        }
+
+        public async Task<(List<AuthToken> Tokens, int Total)> GetAllAuthTokensAsync(AuthTokenQueryParams queryParams)
+        {
+            var validation = queryParams.Validate();
+            if (!validation.IsValid)
+            {
+                throw new ArgumentException(validation.ErrorMessage);
+            }
+
+            var query = _context.AuthTokens.AsQueryable();
+            if (queryParams.TokenType.HasValue)
+                query = query.Where(t => t.TokenType == queryParams.TokenType.ToString());
+            if (queryParams.UserId.HasValue)
+                query = query.Where(t => t.UserId == queryParams.UserId.Value);
+            if (queryParams.FromDate.HasValue)
+                query = query.Where(t => t.CreatedAt >= queryParams.FromDate.Value);
+            if (queryParams.ToDate.HasValue)
+                query = query.Where(t => t.CreatedAt <= queryParams.ToDate.Value);
+
+            if (!string.IsNullOrEmpty(queryParams.SortBy))
+            {
+                bool isAscending = queryParams.SortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase);
+                switch (queryParams.SortBy.ToLower())
+                {
+                    case "tokentype":
+                        query = isAscending ? query.OrderBy(t => t.TokenType) : query.OrderByDescending(t => t.TokenType);
+                        break;
+                    case "createdat":
+                        query = isAscending ? query.OrderBy(t => t.CreatedAt) : query.OrderByDescending(t => t.CreatedAt);
+                        break;
+                    default:
+                        query = isAscending ? query.OrderBy(t => t.TokenId) : query.OrderByDescending(t => t.TokenId);
+                        break;
+                }
+            }
+
+            var total = await query.CountAsync();
+            var tokens = await query
+                .Skip((queryParams.Page - 1) * queryParams.PageSize)
+                .Take(queryParams.PageSize)
+                .ToListAsync();
+
+            return (tokens, total);
         }
     }
 }
