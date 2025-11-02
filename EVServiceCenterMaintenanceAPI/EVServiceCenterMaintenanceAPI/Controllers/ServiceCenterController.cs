@@ -115,6 +115,10 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 var responseData = new { centers = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
                 return Ok(new ApiResponse<object>(200, "Success", "Service centers retrieved successfully.", data: responseData));
             }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new ApiResponse<object>(400, "BadRequest", ex.Message));
+            }
             catch (Exception ex)
             {
                 return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to retrieve service centers: {ex.Message}"));
