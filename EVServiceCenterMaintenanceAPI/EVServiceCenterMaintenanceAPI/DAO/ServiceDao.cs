@@ -144,25 +144,16 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             }
         }
 
-        public async Task<bool> DeleteServiceAsync(int serviceId)
+        public async Task DeleteServiceAsync(int serviceId)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
-            try
-            {
-                var service = await _context.Services.FindAsync(serviceId);
-                if (service == null)
-                    return false;
+            var service = await _context.Services.FindAsync(serviceId);
+            if (service == null)
+                throw new KeyNotFoundException($"Service with ID {serviceId} not found.");
 
-                _context.Services.Remove(service);
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
-                return true;
-            }
-            catch (Exception ex)
-            {
-                await transaction.RollbackAsync();
-                throw new Exception($"Failed to delete service with ID {serviceId}.", ex);
-            }
+            // Soft delete: Set Status = Inactive
+            service.Status = "Inactive";
+            service.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
         }
 
         private static IQueryable<Service> ApplySorting(IQueryable<Service> query, string? sortBy, string sortOrder)

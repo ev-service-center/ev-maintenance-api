@@ -2,7 +2,7 @@
 using EVServiceCenterMaintenanceAPI.Enums;
 using EVServiceCenterMaintenanceAPI.Models;
 using Microsoft.EntityFrameworkCore;
-using System.Linq;
+
 
 namespace EVServiceCenterMaintenanceAPI.Extensions
 {
@@ -618,6 +618,160 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
             }
         }
 
+        public static async Task SeedCustomersAsync(IServiceProvider services)
+        {
+            var context = services.GetRequiredService<EvserviceCenterDbContext>();
+            var userDAO = services.GetRequiredService<UserDao>();
+
+            var customersExist = await context.Users.AnyAsync(u => u.Role == UserRole.Customer.ToString());
+            if (customersExist)
+            {
+                Console.WriteLine("Customers already exist. Skipping seeding.");
+                return;
+            }
+
+            var customerNames = new[]
+            {
+                "Nguyễn Văn An", "Trần Thị Bình", "Lê Văn Cường", "Phạm Thị Dung", "Hoàng Văn Em",
+                "Võ Thị Phượng", "Đặng Văn Giang", "Bùi Thị Hương", "Ngô Văn Hùng", "Đỗ Thị Lan",
+                "Phan Văn Minh", "Vũ Thị Ngọc", "Đinh Văn Quang", "Dương Văn Sơn", "Nguyễn Thị Tâm",
+                "Lý Văn Tuấn", "Chu Văn Việt", "Bạch Thị Yến", "Hồ Văn Đức", "Tạ Văn Hải"
+            };
+
+            var customers = new List<User>();
+
+            for (int i = 0; i < customerNames.Length; i++)
+            {
+                var customer = new User
+                {
+                    Username = $"customer{i + 1}",
+                    Email = $"customer{i + 1}@example.com",
+                    FullName = customerNames[i],
+                    Phone = $"090{1000000 + i:D7}",
+                    Role = UserRole.Customer.ToString(),
+                    Status = UserStatus.Active.ToString(),
+                    Avatar = DefaultAvatar.Local,
+                };
+
+                customers.Add(customer);
+            }
+
+            try
+            {
+                foreach (var customer in customers)
+                {
+                    // Default password: Customer123!
+                    await userDAO.CreateUserAsync(customer, "Customer123!");
+                }
+
+                Console.WriteLine($"Successfully seeded {customers.Count} customers!");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error seeding customers: {ex.Message}");
+                Console.WriteLine(ex.StackTrace);
+            }
+        }
+
+        public static async Task SeedVehiclesAsync(IServiceProvider services)
+        {
+            var context = services.GetRequiredService<EvserviceCenterDbContext>();
+
+            var vehiclesExist = await context.Vehicles.AnyAsync();
+            if (vehiclesExist)
+            {
+                Console.WriteLine("Vehicles already exist. Skipping seeding.");
+                return;
+            }
+
+            var customers = await context.Users
+                .Where(u => u.Role == UserRole.Customer.ToString())
+                .ToListAsync();
+
+            if (customers.Count == 0)
+            {
+                Console.WriteLine("No customers found. Cannot seed vehicles.");
+                return;
+            }
+
+            // Các mẫu xe điện phổ biến ở Việt Nam
+            var vehicleModels = new[]
+            {
+                ("Pega X", "PEG2024"),
+                ("VinFast Klara", "VIN2023"),
+                ("Pega S", "PEG2024"),
+                ("Yadea G5", "YAD2023"),
+                ("Aima A200", "AIM2024"),
+                ("Pega E200", "PEG2023"),
+                ("VinFast Ludo", "VIN2022"),
+                ("Yadea X5", "YAD2024"),
+                ("Aima X7", "AIM2023"),
+                ("Pega Q", "PEG2024"),
+                ("VinFast Impes", "VIN2023"),
+                ("Yadea G6", "YAD2024"),
+                ("Aima G300", "AIM2023"),
+                ("Pega X1", "PEG2024"),
+                ("VinFast Klara S", "VIN2023")
+            };
+
+            var colors = new[] { "Đen", "Trắng", "Xám", "Đỏ", "Xanh dương", "Xanh lá", "Vàng", "Bạc" };
+            var random = new Random();
+
+            var vehicles = new List<Vehicle>();
+            var platePrefixes = new[] { "29", "30", "50", "51", "52", "53", "54", "55", "56", "57", "58", "59" }; // Biển số TP.HCM
+
+            int vehicleIndex = 0;
+
+            // Phân phối vehicles cho customers (mỗi customer có 0-2 vehicles)
+            foreach (var customer in customers)
+            {
+                var numVehicles = random.Next(0, 3); // 0, 1, hoặc 2 vehicles per customer
+
+                for (int i = 0; i < numVehicles && vehicleIndex < vehicleModels.Length; i++)
+                {
+                    var (model, vinPrefix) = vehicleModels[vehicleIndex % vehicleModels.Length];
+                    var manufactureYear = random.Next(2020, 2025);
+                    var currentMileage = random.Next(500, 15000);
+                    var color = colors[random.Next(colors.Length)];
+                    var platePrefix = platePrefixes[random.Next(platePrefixes.Length)];
+                    var plateNumber = random.Next(1000, 9999);
+                    var vin = $"{vinPrefix}{random.Next(100000, 999999)}";
+                    var plate = $"{platePrefix}{plateNumber:D4}";
+
+                    var lastMaintenanceDate = DateTime.UtcNow.AddDays(-random.Next(0, 180)); // Trong vòng 6 tháng gần đây
+
+                    var vehicle = new Vehicle
+                    {
+                        CustomerId = customer.UserId,
+                        Model = model,
+                        Vin = vin,
+                        ManufactureYear = manufactureYear,
+                        CurrentMileage = currentMileage,
+                        LastMaintenanceDate = lastMaintenanceDate,
+                        Color = color,
+                        Plate = plate,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+
+                    vehicles.Add(vehicle);
+                    vehicleIndex++;
+                }
+            }
+
+            try
+            {
+                await context.Vehicles.AddRangeAsync(vehicles);
+                await context.SaveChangesAsync();
+                Console.WriteLine($"Successfully seeded {vehicles.Count} vehicles for {customers.Count} customers!");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error seeding vehicles: {ex.Message}");
+                Console.WriteLine(ex.StackTrace);
+            }
+        }
+
         public static async Task SeedAllAsync(IServiceProvider services)
         {
             Console.WriteLine("Starting database seeding...");
@@ -625,8 +779,10 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
             await SeedServiceCentersAsync(services);
             await SeedServicesAsync(services);
             await SeedStaffAndTechniciansAsync(services);
+            await SeedCustomersAsync(services);
             await SeedAppointmentSlotsAsync(services);
             await SeedPartsAsync(services);
+            await SeedVehiclesAsync(services);
             Console.WriteLine("Database seeding completed!");
         }
     }

@@ -140,5 +140,17 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 throw new Exception($"Failed to update part with ID {part.PartId}.", ex);
             }
         }
+
+        public async Task DeletePartAsync(int partId)
+        {
+            var part = await _context.Parts.FindAsync(partId);
+            if (part == null)
+                throw new KeyNotFoundException($"Part with ID {partId} not found.");
+
+            // Soft delete: Set Status = Inactive
+            part.Status = "Inactive";
+            part.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+        }
     }
 }

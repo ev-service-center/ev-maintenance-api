@@ -60,7 +60,8 @@
     {
         Open,
         Closed,
-        Maintenance
+        Maintenance,
+        Deleted
     }
 
     public static class DefaultAvatar
