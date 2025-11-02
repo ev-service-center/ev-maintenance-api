@@ -215,5 +215,27 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
             }
         }
+
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> DeleteVehicle(int id)
+        {
+            try
+            {
+                var vehicle = await _vehicleDao.GetVehicleByIdAsync(id);
+                if (vehicle == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "Vehicle not found."));
+
+                var success = await _vehicleDao.DeleteVehicleAsync(id);
+                if (!success)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "Vehicle not found."));
+
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
     }
 }

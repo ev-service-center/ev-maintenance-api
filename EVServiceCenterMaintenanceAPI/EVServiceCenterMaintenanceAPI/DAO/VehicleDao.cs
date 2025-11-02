@@ -126,5 +126,26 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 throw new Exception($"Failed to update vehicle with ID {vehicle.VehicleId}.", ex);
             }
         }
+
+        public async Task<bool> DeleteVehicleAsync(int vehicleId)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var vehicle = await _context.Vehicles.FindAsync(vehicleId);
+                if (vehicle == null)
+                    return false;
+
+                _context.Vehicles.Remove(vehicle);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception($"Failed to delete vehicle with ID {vehicleId}.", ex);
+            }
+        }
     }
 }
