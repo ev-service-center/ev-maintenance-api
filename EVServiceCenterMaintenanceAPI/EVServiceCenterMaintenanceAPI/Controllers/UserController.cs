@@ -19,18 +19,18 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         private readonly UserDao _userDao;
         private readonly ImageService _imageService;
         private readonly EmailService _emailService;
-
         private readonly AuthDao _authDao;
-
         private readonly ITokenBlacklistService _tokenBlacklistService;
+        private readonly EmployeeDao _employeeDao;
 
-        public UserController(UserDao userDao, ITokenBlacklistService tokenBlacklistService, ImageService imageService, EmailService emailService, AuthDao authDao)
+        public UserController(UserDao userDao, ITokenBlacklistService tokenBlacklistService, ImageService imageService, EmailService emailService, AuthDao authDao, EmployeeDao employeeDao)
         {
             _userDao = userDao;
             _tokenBlacklistService = tokenBlacklistService;
             _imageService = imageService;
             _emailService = emailService;
             _authDao = authDao;
+            _employeeDao = employeeDao;
         }
 
         [HttpPost]
@@ -174,12 +174,11 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     // Staff/Technician: Chỉ xem cùng center
                     if (targetUser.Role == UserRole.Staff.ToString() || targetUser.Role == UserRole.Technician.ToString())
                     {
-                        var employeeDao = HttpContext.RequestServices.GetRequiredService<EmployeeDao>();
-                        var currentEmployee = await employeeDao.GetEmployeeByIdAsync(currentUserId);
+                        var currentEmployee = await _employeeDao.GetEmployeeByIdAsync(currentUserId);
                         if (currentEmployee == null)
                             return BadRequest(new ApiResponse<object>(400, "BadRequest", "Staff user does not have an associated employee record."));
 
-                        var targetEmployee = await employeeDao.GetEmployeeByIdAsync(id);
+                        var targetEmployee = await _employeeDao.GetEmployeeByIdAsync(id);
                         if (targetEmployee == null || targetEmployee.CenterId != currentEmployee.CenterId)
                             return StatusCode(403, new ApiResponse<object>(403, "Forbidden", "Staff can only view Staff/Technician users from their own service center."));
                     }
@@ -241,13 +240,12 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 HashSet<int>? centerUserIds = null;
                 if (currentUser.Role == UserRole.Staff.ToString())
                 {
-                    var employeeDao = HttpContext.RequestServices.GetRequiredService<EmployeeDao>();
-                    var currentEmployee = await employeeDao.GetEmployeeByIdAsync(currentUserId);
+                    var currentEmployee = await _employeeDao.GetEmployeeByIdAsync(currentUserId);
                     if (currentEmployee == null)
                         return BadRequest(new ApiResponse<object>(400, "BadRequest", "Staff user does not have an associated employee record."));
 
                     // Lấy danh sách userIds của employees trong center này
-                    var (Employees, Total) = await employeeDao.GetAllEmployeesAsync(new EmployeeQueryParams
+                    var (Employees, Total) = await _employeeDao.GetAllEmployeesAsync(new EmployeeQueryParams
                     {
                         CenterId = currentEmployee.CenterId,
                         Page = 1,
@@ -605,15 +603,14 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 HashSet<int>? centerUserIds = null;
                 if (currentUser.Role == UserRole.Staff.ToString())
                 {
-                    var employeeDao = HttpContext.RequestServices.GetRequiredService<EmployeeDao>();
-                    var currentEmployee = await employeeDao.GetEmployeeByIdAsync(currentUserId);
+                    var currentEmployee = await _employeeDao.GetEmployeeByIdAsync(currentUserId);
                     if (currentEmployee == null)
                         return BadRequest(new ApiResponse<object>(400, "BadRequest", "Staff user does not have an associated employee record."));
 
                     // Lấy danh sách userIds của employees trong center này (nếu query Staff/Technician)
                     if (roleEnum == UserRole.Staff || roleEnum == UserRole.Technician)
                     {
-                        var (Employees, Total) = await employeeDao.GetAllEmployeesAsync(new EmployeeQueryParams
+                        var (Employees, Total) = await _employeeDao.GetAllEmployeesAsync(new EmployeeQueryParams
                         {
                             CenterId = currentEmployee.CenterId,
                             Page = 1,
