@@ -98,6 +98,7 @@ builder.Services.AddScoped<ServiceDao>();
 builder.Services.AddScoped<PartDao>();
 builder.Services.AddScoped<ServiceCenterDao>();
 builder.Services.AddScoped<EmployeeDao>();
+builder.Services.AddScoped<ReminderDao>();
 
 
 builder.Services.AddScoped<ITokenBlacklistService, TokenBlacklistService>();

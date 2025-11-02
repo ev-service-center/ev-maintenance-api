@@ -4,6 +4,7 @@ using EVServiceCenterMaintenanceAPI.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using EVServiceCenterMaintenanceAPI.DAO;
+using EVServiceCenterMaintenanceAPI.Params;
 
 namespace EVServiceCenterMaintenanceAPI.Controllers
 {
@@ -38,8 +39,6 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     Color = dto.Color,
                     Plate = dto.Plate
                 };
-
-                // validate sau
 
                 var createdVehicle = await _vehicleDao.CreateVehicleAsync(vehicle);
                 var createdDto = new VehicleResponeDto
@@ -125,6 +124,113 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 }).ToList();
 
                 return Ok(new ApiResponse<List<VehicleResponeDto>>(200, "Success", "Vehicles retrieved successfully.", data: dtos));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpGet]
+        [Authorize(Roles = "Staff,Admin")]
+        public async Task<IActionResult> GetAllVehicles([FromQuery] VehicleQueryParams queryParams)
+        {
+            try
+            {
+                var (vehicles, total) = await _vehicleDao.GetAllVehiclesAsync(queryParams);
+
+                var dtos = vehicles.Select(v => new VehicleResponeDto
+                {
+                    VehicleId = v.VehicleId,
+                    CustomerId = v.CustomerId,
+                    Model = v.Model,
+                    VIN = v.Vin,
+                    ManufactureYear = v.ManufactureYear,
+                    CurrentMileage = v.CurrentMileage!.Value,
+                    LastMaintenanceDate = v.LastMaintenanceDate,
+                    Color = v.Color,
+                    Plate = v.Plate,
+                    CreatedAt = v.CreatedAt,
+                    UpdatedAt = v.UpdatedAt
+                }).ToList();
+
+                var responseData = new { vehicles = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
+                return Ok(new ApiResponse<object>(200, "Success", "Vehicles retrieved successfully.", data: responseData));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Customer,Staff,Admin")]
+        public async Task<IActionResult> UpdateVehicle(int id, [FromBody] VehicleUpdateRequestDto dto)
+        {
+            try
+            {
+                if (id != dto.VehicleId)
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Vehicle ID mismatch."));
+
+                var existingVehicle = await _vehicleDao.GetVehicleByIdAsync(id);
+                if (existingVehicle == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "Vehicle not found."));
+
+                var vehicle = new Vehicle
+                {
+                    VehicleId = dto.VehicleId,
+                    CustomerId = dto.CustomerId,
+                    Model = dto.Model,
+                    Vin = dto.VIN,
+                    ManufactureYear = dto.ManufactureYear,
+                    CurrentMileage = dto.CurrentMileage,
+                    Color = dto.Color,
+                    Plate = dto.Plate,
+                    CreatedAt = existingVehicle.CreatedAt,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                var updatedVehicle = await _vehicleDao.UpdateVehicleAsync(vehicle);
+                var updatedDto = new VehicleResponeDto
+                {
+                    VehicleId = updatedVehicle.VehicleId,
+                    CustomerId = updatedVehicle.CustomerId,
+                    Model = updatedVehicle.Model,
+                    VIN = updatedVehicle.Vin,
+                    ManufactureYear = updatedVehicle.ManufactureYear,
+                    CurrentMileage = updatedVehicle.CurrentMileage!.Value,
+                    LastMaintenanceDate = updatedVehicle.LastMaintenanceDate,
+                    Color = updatedVehicle.Color,
+                    Plate = updatedVehicle.Plate,
+                    CreatedAt = updatedVehicle.CreatedAt,
+                    UpdatedAt = updatedVehicle.UpdatedAt
+                };
+
+                await _reminderDao.GenerateRemindersForVehicleAsync(updatedVehicle.VehicleId);
+
+                return Ok(new ApiResponse<VehicleResponeDto>(200, "Success", "Vehicle updated successfully.", data: updatedDto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> DeleteVehicle(int id)
+        {
+            try
+            {
+                var vehicle = await _vehicleDao.GetVehicleByIdAsync(id);
+                if (vehicle == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "Vehicle not found."));
+
+                var success = await _vehicleDao.DeleteVehicleAsync(id);
+                if (!success)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "Vehicle not found."));
+
+                return NoContent();
             }
             catch (Exception ex)
             {
