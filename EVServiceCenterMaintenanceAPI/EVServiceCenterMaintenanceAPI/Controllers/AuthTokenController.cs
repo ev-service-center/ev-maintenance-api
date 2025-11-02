@@ -155,6 +155,22 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             }
         }
 
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> DeleteAuthToken(int id)
+        {
+            try
+            {
+                var success = await _authTokenDao.DeleteAuthTokenAsync(id);
+                if (!success)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "Auth token not found."));
 
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
     }
 }
