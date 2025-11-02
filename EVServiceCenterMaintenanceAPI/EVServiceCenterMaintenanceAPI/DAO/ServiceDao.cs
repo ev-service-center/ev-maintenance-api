@@ -50,7 +50,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
             // Apply filters
             if (!string.IsNullOrEmpty(queryParams.Search))
-                query = query.Where(s => s.ServiceName.Contains(queryParams.Search) || (s.Description != null && s.Description.Contains(queryParams.Search)));
+                query = query.Where(s => s.ServiceName.Contains(queryParams.Search));
 
             if (queryParams.StatusService.HasValue)
                 query = query.Where(s => s.Status == queryParams.StatusService.ToString());
@@ -94,7 +94,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
             // Apply filters
             if (!string.IsNullOrEmpty(queryParams.Search))
-                query = query.Where(s => s.ServiceName.Contains(queryParams.Search) || (s.Description != null && s.Description.Contains(queryParams.Search)));
+                query = query.Where(s => s.ServiceName.Contains(queryParams.Search));
 
             if (queryParams.FromDate.HasValue)
                 query = query.Where(s => s.CreatedAt >= queryParams.FromDate.Value);

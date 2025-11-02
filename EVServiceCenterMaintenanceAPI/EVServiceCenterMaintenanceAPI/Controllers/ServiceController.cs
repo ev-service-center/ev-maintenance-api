@@ -54,8 +54,8 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     BasePrice = createdService.BasePrice,
                     EstimatedTime = createdService.EstimatedTime,
                     Status = Enum.Parse<ServiceStatus>(createdService.Status),
-                    ReminderIntervalDays = createdService.ReminderIntervalDays.Value,
-                    ReminderMileage = createdService.ReminderMileage.Value,
+                    ReminderIntervalDays = createdService.ReminderIntervalDays ?? 0,
+                    ReminderMileage = createdService.ReminderMileage ?? 0,
                     Notes = createdService.Notes,
                     CreatedAt = createdService.CreatedAt,
                     UpdatedAt = createdService.UpdatedAt
@@ -71,7 +71,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         }
 
         [HttpGet("{id}")]
-        [Authorize(Roles = "Customer,Staff,Technician,Admin")]
+        [Authorize(Roles = "Staff,Technician,Admin")]
         public async Task<IActionResult> GetService(int id)
         {
             try
@@ -88,8 +88,8 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     BasePrice = service.BasePrice,
                     EstimatedTime = service.EstimatedTime,
                     Status = Enum.Parse<ServiceStatus>(service.Status),
-                    ReminderIntervalDays = service.ReminderIntervalDays.Value,
-                    ReminderMileage = service.ReminderMileage.Value,
+                    ReminderIntervalDays = service.ReminderIntervalDays ?? 0,
+                    ReminderMileage = service.ReminderMileage ?? 0,
                     Notes = service.Notes,
                     CreatedAt = service.CreatedAt,
                     UpdatedAt = service.UpdatedAt
@@ -159,6 +159,10 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 
                 var responseData = new { services = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
                 return Ok(new ApiResponse<object>(200, "Success", "Active services retrieved successfully.", data: responseData));
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new ApiResponse<object>(400, "BadRequest", ex.Message));
             }
             catch (Exception ex)
             {
@@ -241,7 +245,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 
 
         [HttpGet]
-        [Authorize]
+        [Authorize(Roles = "Staff,Technician,Admin")]
         public async Task<IActionResult> GetAllServices([FromQuery] ServiceQueryParams queryParams)
         {
             try
@@ -265,6 +269,10 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 
                 var responseData = new { services = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
                 return Ok(new ApiResponse<object>(200, "Success", "Services retrieved successfully.", data: responseData));
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new ApiResponse<object>(400, "BadRequest", ex.Message));
             }
             catch (Exception ex)
             {
