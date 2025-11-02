@@ -75,9 +75,30 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             try
             {
+                var userIdClaim = User.FindFirst("UserId")?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                var currentUser = await _userDao.GetUserByIdAsync(currentUserId);
+                if (currentUser == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "User not found."));
+
                 var part = await _partDao.GetPartByIdAsync(id);
                 if (part == null)
                     return NotFound(new ApiResponse<PartResponseDto>(404, "NotFound", "Part not found."));
+
+                // Staff và Technician chỉ được xem parts tại center của họ
+                if (currentUser.Role == UserRole.Staff.ToString() || currentUser.Role == UserRole.Technician.ToString())
+                {
+                    var currentEmployee = await _employeeDao.GetEmployeeByIdAsync(currentUserId);
+                    if (currentEmployee == null)
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                            $"{currentUser.Role} user does not have an associated employee record."));
+
+                    if (part.CenterId != currentEmployee.CenterId)
+                        return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
+                            $"{currentUser.Role} can only view parts from their own service center (Center ID: {currentEmployee.CenterId})."));
+                }
 
                 var dto = new PartResponseDto
                 {
