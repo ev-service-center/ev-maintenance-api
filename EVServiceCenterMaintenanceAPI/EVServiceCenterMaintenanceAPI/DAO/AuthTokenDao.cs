@@ -104,5 +104,26 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
             return (tokens, total);
         }
+
+        public async Task<bool> DeleteAuthTokenAsync(int tokenId)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var token = await _context.AuthTokens.FindAsync(tokenId);
+                if (token == null)
+                    return false;
+
+                _context.AuthTokens.Remove(token);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception($"Failed to delete auth token with ID {tokenId}.", ex);
+            }
+        }
     }
 }
