@@ -2,6 +2,7 @@
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Enums;
 using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -124,5 +125,36 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
             }
         }
+
+        [HttpGet]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> GetAllAuthTokens([FromQuery] AuthTokenQueryParams queryParams)
+        {
+            try
+            {
+                var (tokens, total) = await _authTokenDao.GetAllAuthTokensAsync(queryParams);
+
+                var dtos = tokens.Select(t => new AuthTokenResponseDto
+                {
+                    TokenId = t.TokenId,
+                    UserId = t.UserId,
+                    TokenType = Enum.Parse<TokenType>(t.TokenType),
+                    TokenValue = t.TokenValue,
+                    CreatedAt = t.CreatedAt,
+                    ExpiresAt = t.ExpiresAt,
+                    IsUsed = t.IsUsed,
+                    UpdatedAt = t.UpdatedAt
+                }).ToList();
+
+                var responseData = new { tokens = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
+                return Ok(new ApiResponse<object>(200, "Success", "Auth tokens retrieved successfully.", data: responseData));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+
     }
 }
