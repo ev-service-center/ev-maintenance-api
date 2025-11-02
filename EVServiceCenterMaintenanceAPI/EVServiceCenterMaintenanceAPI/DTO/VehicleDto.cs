@@ -28,4 +28,16 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         [StringLength(50)] public string? Color { get; set; }
         [Required, StringLength(20)] public string Plate { get; set; } = null!;
     }
+
+    public class VehicleUpdateRequestDto
+    {
+        [Required] public int VehicleId { get; set; }
+        [Required] public int CustomerId { get; set; }
+        [Required, StringLength(100)] public string Model { get; set; } = null!;
+        [Required, StringLength(50)] public string VIN { get; set; } = null!;
+        public int? ManufactureYear { get; set; }
+        public decimal CurrentMileage { get; set; }
+        [StringLength(50)] public string? Color { get; set; }
+        [Required, StringLength(20)] public string Plate { get; set; } = null!;
+    }
 }

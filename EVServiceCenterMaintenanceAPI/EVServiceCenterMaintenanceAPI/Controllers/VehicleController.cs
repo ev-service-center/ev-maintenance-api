@@ -56,7 +56,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     UpdatedAt = createdVehicle.UpdatedAt
                 };
 
-                //await _reminderDao.GenerateRemindersForVehicleAsync(createdVehicle.VehicleId);
+                await _reminderDao.GenerateRemindersForVehicleAsync(createdVehicle.VehicleId);
 
                 return CreatedAtAction(nameof(GetVehicle),
                     new { id = createdVehicle.VehicleId },
@@ -146,7 +146,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     Model = v.Model,
                     VIN = v.Vin,
                     ManufactureYear = v.ManufactureYear,
-                    CurrentMileage = v.CurrentMileage.Value,
+                    CurrentMileage = v.CurrentMileage!.Value,
                     LastMaintenanceDate = v.LastMaintenanceDate,
                     Color = v.Color,
                     Plate = v.Plate,
@@ -156,6 +156,59 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 
                 var responseData = new { vehicles = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
                 return Ok(new ApiResponse<object>(200, "Success", "Vehicles retrieved successfully.", data: responseData));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Customer,Staff,Admin")]
+        public async Task<IActionResult> UpdateVehicle(int id, [FromBody] VehicleUpdateRequestDto dto)
+        {
+            try
+            {
+                if (id != dto.VehicleId)
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Vehicle ID mismatch."));
+
+                var existingVehicle = await _vehicleDao.GetVehicleByIdAsync(id);
+                if (existingVehicle == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "Vehicle not found."));
+
+                var vehicle = new Vehicle
+                {
+                    VehicleId = dto.VehicleId,
+                    CustomerId = dto.CustomerId,
+                    Model = dto.Model,
+                    Vin = dto.VIN,
+                    ManufactureYear = dto.ManufactureYear,
+                    CurrentMileage = dto.CurrentMileage,
+                    Color = dto.Color,
+                    Plate = dto.Plate,
+                    CreatedAt = existingVehicle.CreatedAt,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                var updatedVehicle = await _vehicleDao.UpdateVehicleAsync(vehicle);
+                var updatedDto = new VehicleResponeDto
+                {
+                    VehicleId = updatedVehicle.VehicleId,
+                    CustomerId = updatedVehicle.CustomerId,
+                    Model = updatedVehicle.Model,
+                    VIN = updatedVehicle.Vin,
+                    ManufactureYear = updatedVehicle.ManufactureYear,
+                    CurrentMileage = updatedVehicle.CurrentMileage!.Value,
+                    LastMaintenanceDate = updatedVehicle.LastMaintenanceDate,
+                    Color = updatedVehicle.Color,
+                    Plate = updatedVehicle.Plate,
+                    CreatedAt = updatedVehicle.CreatedAt,
+                    UpdatedAt = updatedVehicle.UpdatedAt
+                };
+
+                await _reminderDao.GenerateRemindersForVehicleAsync(updatedVehicle.VehicleId);
+
+                return Ok(new ApiResponse<VehicleResponeDto>(200, "Success", "Vehicle updated successfully.", data: updatedDto));
             }
             catch (Exception ex)
             {

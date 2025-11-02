@@ -97,5 +97,34 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
             return (vehicles, total);
         }
+
+        public async Task<Vehicle> UpdateVehicleAsync(Vehicle vehicle)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var existingVehicle = await _context.Vehicles.FirstOrDefaultAsync(v => v.VehicleId == vehicle.VehicleId);
+                if (existingVehicle == null)
+                    throw new Exception($"Vehicle with ID {vehicle.VehicleId} not found.");
+
+                existingVehicle.Model = vehicle.Model;
+                existingVehicle.Vin = vehicle.Vin;
+                existingVehicle.ManufactureYear = vehicle.ManufactureYear;
+                existingVehicle.CurrentMileage = vehicle.CurrentMileage;
+                existingVehicle.Color = vehicle.Color;
+                existingVehicle.Plate = vehicle.Plate;
+                existingVehicle.LastMaintenanceDate = vehicle.LastMaintenanceDate;
+                existingVehicle.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return existingVehicle;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception($"Failed to update vehicle with ID {vehicle.VehicleId}.", ex);
+            }
+        }
     }
 }
