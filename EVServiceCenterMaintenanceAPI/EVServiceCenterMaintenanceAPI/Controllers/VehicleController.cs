@@ -4,6 +4,7 @@ using EVServiceCenterMaintenanceAPI.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using EVServiceCenterMaintenanceAPI.DAO;
+using EVServiceCenterMaintenanceAPI.Params;
 
 namespace EVServiceCenterMaintenanceAPI.Controllers
 {
@@ -39,8 +40,6 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     Plate = dto.Plate
                 };
 
-                // validate sau
-
                 var createdVehicle = await _vehicleDao.CreateVehicleAsync(vehicle);
                 var createdDto = new VehicleResponeDto
                 {
@@ -57,7 +56,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     UpdatedAt = createdVehicle.UpdatedAt
                 };
 
-                await _reminderDao.GenerateRemindersForVehicleAsync(createdVehicle.VehicleId);
+                //await _reminderDao.GenerateRemindersForVehicleAsync(createdVehicle.VehicleId);
 
                 return CreatedAtAction(nameof(GetVehicle),
                     new { id = createdVehicle.VehicleId },
@@ -125,6 +124,38 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 }).ToList();
 
                 return Ok(new ApiResponse<List<VehicleResponeDto>>(200, "Success", "Vehicles retrieved successfully.", data: dtos));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpGet]
+        [Authorize(Roles = "Staff,Admin")]
+        public async Task<IActionResult> GetAllVehicles([FromQuery] VehicleQueryParams queryParams)
+        {
+            try
+            {
+                var (vehicles, total) = await _vehicleDao.GetAllVehiclesAsync(queryParams);
+
+                var dtos = vehicles.Select(v => new VehicleResponeDto
+                {
+                    VehicleId = v.VehicleId,
+                    CustomerId = v.CustomerId,
+                    Model = v.Model,
+                    VIN = v.Vin,
+                    ManufactureYear = v.ManufactureYear,
+                    CurrentMileage = v.CurrentMileage.Value,
+                    LastMaintenanceDate = v.LastMaintenanceDate,
+                    Color = v.Color,
+                    Plate = v.Plate,
+                    CreatedAt = v.CreatedAt,
+                    UpdatedAt = v.UpdatedAt
+                }).ToList();
+
+                var responseData = new { vehicles = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
+                return Ok(new ApiResponse<object>(200, "Success", "Vehicles retrieved successfully.", data: responseData));
             }
             catch (Exception ex)
             {
