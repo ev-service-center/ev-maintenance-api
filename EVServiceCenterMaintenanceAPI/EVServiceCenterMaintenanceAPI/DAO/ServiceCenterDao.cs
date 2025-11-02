@@ -54,10 +54,20 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             }
 
             var query = _context.ServiceCenters.AsQueryable();
+
             if (!string.IsNullOrEmpty(queryParams.Search))
                 query = query.Where(c => c.CenterName.Contains(queryParams.Search) || c.Address.Contains(queryParams.Search));
+
+            // Filter by Status: Nếu có chọn Status thì dùng Status đó, nếu không thì ẩn Deleted
             if (queryParams.StatusServiceCenter.HasValue)
+            {
                 query = query.Where(c => c.Status == queryParams.StatusServiceCenter.ToString());
+            }
+            else
+            {
+                // Mặc định: không show Deleted
+                query = query.Where(c => c.Status != "Deleted");
+            }
             if (queryParams.FromDate.HasValue)
                 query = query.Where(c => c.CreatedAt >= queryParams.FromDate.Value);
             if (queryParams.ToDate.HasValue)
@@ -92,26 +102,16 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             return (centers, total);
         }
 
-        public async Task<bool> DeleteServiceCenterAsync(int centerId)
+        public async Task DeleteServiceCenterAsync(int centerId)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
-            try
-            {
-                var center = await _context.ServiceCenters.FindAsync(centerId);
-                if (center == null)
-                    return false;
+            var center = await _context.ServiceCenters.FindAsync(centerId);
+            if (center == null)
+                throw new KeyNotFoundException($"Service center with ID {centerId} not found.");
 
-                _context.ServiceCenters.Remove(center);
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
-                return true;
-            }
-            catch (Exception ex)
-            {
-                await transaction.RollbackAsync();
-                throw new Exception($"Failed to delete service center with ID {centerId}: {ex.Message}", ex);
-            }
+            // Soft delete: Set Status = Deleted
+            center.Status = "Deleted";
+            center.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
         }
-
     }
 }

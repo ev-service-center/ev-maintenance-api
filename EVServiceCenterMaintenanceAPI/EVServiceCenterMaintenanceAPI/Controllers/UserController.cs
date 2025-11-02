@@ -470,24 +470,19 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             try
             {
-                var user = await _userDao.GetUserByIdAsync(id);
-                if (user == null)
-                    return NotFound(new ApiResponse<object>(404, "NotFound", "User not found."));
-
                 // Revoke all refresh tokens
                 await _authDao.RevokeRefreshTokensByUserIdAsync(id);
 
                 // Blacklist all JWT tokens
                 await _tokenBlacklistService.BlacklistAllUserTokensAsync(id);
 
-                var success = await _userDao.DeleteUserAsync(id);
-                if (!success)
-                    return NotFound(new ApiResponse<object>(404, "NotFound", "User not found."));
+                await _userDao.DeleteUserAsync(id);
 
-                if (!string.IsNullOrEmpty(user.Avatar))
-                    _imageService.DeleteImage(user.Avatar);
-
-                return NoContent();
+                return Ok(new ApiResponse<object>(200, "Success", "User deleted successfully."));
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new ApiResponse<object>(404, "NotFound", ex.Message));
             }
             catch (Exception ex)
             {

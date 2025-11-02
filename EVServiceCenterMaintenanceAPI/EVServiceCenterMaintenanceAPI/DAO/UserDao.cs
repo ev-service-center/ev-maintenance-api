@@ -140,8 +140,17 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 query = query.Where(u => u.Username.Contains(queryParams.Search) || u.FullName.Contains(queryParams.Search) || u.Email.Contains(queryParams.Search));
             if (queryParams.Role.HasValue)
                 query = query.Where(u => u.Role == queryParams.Role.ToString());
+
+            // Filter by Status: Nếu có chọn Status thì dùng Status đó, nếu không thì ẩn Deleted
             if (queryParams.StatusUser.HasValue)
+            {
                 query = query.Where(u => u.Status == queryParams.StatusUser.ToString());
+            }
+            else
+            {
+                // Mặc định: không show Deleted
+                query = query.Where(u => u.Status != "Deleted");
+            }
             if (queryParams.FromDate.HasValue)
                 query = query.Where(u => u.CreatedAt >= queryParams.FromDate.Value);
             if (queryParams.ToDate.HasValue)
@@ -170,15 +179,16 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             return (users, total);
         }
 
-        public async Task<bool> DeleteUserAsync(int userId)
+        public async Task DeleteUserAsync(int userId)
         {
             var user = await _context.Users.FindAsync(userId);
             if (user == null)
-                return false;
+                throw new KeyNotFoundException($"User with ID {userId} not found.");
 
-            _context.Users.Remove(user);
+            // Soft delete: Set Status = Deleted
+            user.Status = "Deleted";
+            user.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
-            return true;
         }
 
         public async Task<List<User>> GetUsersByRoleAsync(UserRole role)

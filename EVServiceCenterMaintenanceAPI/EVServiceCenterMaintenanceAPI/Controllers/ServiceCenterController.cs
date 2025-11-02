@@ -127,11 +127,12 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             try
             {
-                var success = await _serviceCenterDao.DeleteServiceCenterAsync(id);
-                if (!success)
-                    return NotFound(new ApiResponse<object>(404, "NotFound", "Service center not found."));
-
-                return NoContent();
+                await _serviceCenterDao.DeleteServiceCenterAsync(id);
+                return Ok(new ApiResponse<object>(200, "Success", "Service center deleted successfully."));
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new ApiResponse<object>(404, "NotFound", ex.Message));
             }
             catch (Exception ex)
             {
