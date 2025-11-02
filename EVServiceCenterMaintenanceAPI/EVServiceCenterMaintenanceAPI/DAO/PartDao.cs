@@ -1,5 +1,6 @@
 ﻿using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.EntityFrameworkCore;
 
 namespace EVServiceCenterMaintenanceAPI.DAO
@@ -35,6 +36,52 @@ namespace EVServiceCenterMaintenanceAPI.DAO
         public async Task<Part?> GetPartByIdAsync(int partId)
         {
             return await _context.Parts.FirstOrDefaultAsync(p => p.PartId == partId);
+        }
+
+        public async Task<(List<Part> Parts, int Total)> GetAllPartsAsync(PartQueryParams queryParams)
+        {
+            var (IsValid, ErrorMessage) = queryParams.Validate();
+            if (!IsValid)
+            {
+                throw new ArgumentException(ErrorMessage);
+            }
+
+            var query = _context.Parts.AsQueryable();
+            if (!string.IsNullOrEmpty(queryParams.Search))
+                query = query.Where(p => p.PartName.Contains(queryParams.Search));
+            if (queryParams.CenterId.HasValue)
+                query = query.Where(p => p.CenterId == queryParams.CenterId.Value);
+            if (queryParams.StatusPart.HasValue)
+                query = query.Where(p => p.Status == queryParams.StatusPart.ToString());
+            if (queryParams.FromDate.HasValue)
+                query = query.Where(p => p.CreatedAt >= queryParams.FromDate.Value);
+            if (queryParams.ToDate.HasValue)
+                query = query.Where(p => p.CreatedAt <= queryParams.ToDate.Value);
+
+            if (!string.IsNullOrEmpty(queryParams.SortBy))
+            {
+                bool isAscending = queryParams.SortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase);
+                query = queryParams.SortBy.ToLower() switch
+                {
+                    "partname" => isAscending ? query.OrderBy(p => p.PartName) : query.OrderByDescending(p => p.PartName),
+                    "price" => isAscending ? query.OrderBy(p => p.Price) : query.OrderByDescending(p => p.Price),
+                    "quantityinstock" => isAscending ? query.OrderBy(p => p.QuantityInStock) : query.OrderByDescending(p => p.QuantityInStock),
+                    "createdat" => isAscending ? query.OrderBy(p => p.CreatedAt) : query.OrderByDescending(p => p.CreatedAt),
+                    _ => isAscending ? query.OrderBy(p => p.PartId) : query.OrderByDescending(p => p.PartId),
+                };
+            }
+            else
+            {
+                query = query.OrderBy(p => p.PartId);
+            }
+
+            var total = await query.CountAsync();
+            var parts = await query
+                .Skip((queryParams.Page - 1) * queryParams.PageSize)
+                .Take(queryParams.PageSize)
+                .ToListAsync();
+
+            return (parts, total);
         }
 
         public async Task<List<PartSuggestionDto>> GetPartReorderSuggestionsAsync(int centerId)

@@ -6,7 +6,7 @@
         private int _pageSize = 10;
         private string _sortOrder = "asc";
 
-        public virtual string? Type { get; set; }
+        //public virtual string? Type { get; set; }
 
         public virtual int Page
         {
@@ -28,7 +28,7 @@
 
         public virtual string? Search { get; set; }
 
-        public virtual string? Status { get; set; }
+        //public virtual string? Status { get; set; }
 
         public virtual DateTime? FromDate { get; set; }
 

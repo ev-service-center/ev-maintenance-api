@@ -2,6 +2,7 @@
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Enums;
 using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,10 +13,16 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
     public class PartController : ControllerBase
     {
         private readonly PartDao _partDao;
+        private readonly UserDao _userDao;
+        private readonly EmployeeDao _employeeDao;
+        private readonly ServiceCenterDao _serviceCenterDao;
 
-        public PartController(PartDao partDao)
+        public PartController(PartDao partDao, UserDao userDao, EmployeeDao employeeDao, ServiceCenterDao serviceCenterDao)
         {
             _partDao = partDao;
+            _userDao = userDao;
+            _employeeDao = employeeDao;
+            _serviceCenterDao = serviceCenterDao;
         }
 
         [HttpPost]
@@ -42,10 +49,14 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     PartName = createdPart.PartName,
                     Description = createdPart.Description,
                     Price = createdPart.Price,
-                    QuantityInStock = createdPart.QuantityInStock.Value,
-                    MinStock = createdPart.MinStock.Value,
+                    QuantityInStock = createdPart.QuantityInStock ?? 0,
+                    MinStock = createdPart.MinStock ?? 0,
                     CenterId = createdPart.CenterId,
-                    Status = Enum.Parse<PartStatus>(createdPart.Status),
+                    Status = string.IsNullOrEmpty(createdPart.Status)
+                        ? PartStatus.Inactive
+                        : Enum.TryParse<PartStatus>(createdPart.Status, out var status)
+                            ? status
+                            : PartStatus.Inactive,
                     CreatedAt = createdPart.CreatedAt,
                     UpdatedAt = createdPart.UpdatedAt
                 };
@@ -74,15 +85,91 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     PartName = part.PartName,
                     Description = part.Description,
                     Price = part.Price,
-                    QuantityInStock = part.QuantityInStock.Value,
-                    MinStock = part.MinStock.Value,
+                    QuantityInStock = part.QuantityInStock ?? 0,
+                    MinStock = part.MinStock ?? 0,
                     CenterId = part.CenterId,
-                    Status = Enum.Parse<PartStatus>(part.Status),
+                    Status = string.IsNullOrEmpty(part.Status)
+                        ? PartStatus.Inactive
+                        : Enum.TryParse<PartStatus>(part.Status, out var status)
+                            ? status
+                            : PartStatus.Inactive,
                     CreatedAt = part.CreatedAt,
                     UpdatedAt = part.UpdatedAt
                 };
 
                 return Ok(new ApiResponse<PartResponseDto>(200, "Success", "Part retrieved successfully.", data: dto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpGet]
+        [Authorize(Roles = "Staff,Technician,Admin")]
+        public async Task<IActionResult> GetAllParts([FromQuery] PartQueryParams queryParams)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst("UserId")?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                var currentUser = await _userDao.GetUserByIdAsync(currentUserId);
+                if (currentUser == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "User not found."));
+
+                // Validate CenterId tồn tại ngay từ đầu nếu có trong query params
+                if (queryParams.CenterId.HasValue)
+                {
+                    var centerExists = await _serviceCenterDao.IsExistServiceCenterAsync(queryParams.CenterId.Value);
+                    if (!centerExists)
+                        return NotFound(new ApiResponse<object>(404, "NotFound", $"Service Center with ID {queryParams.CenterId.Value} not found."));
+                }
+
+                if (currentUser.Role == UserRole.Staff.ToString() || currentUser.Role == UserRole.Technician.ToString())
+                {
+                    // Staff và Technician chỉ được xem parts tại center của họ
+                    var currentEmployee = await _employeeDao.GetEmployeeByIdAsync(currentUserId);
+                    if (currentEmployee == null)
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                            $"{currentUser.Role} user does not have an associated employee record."));
+
+                    // Nếu có CenterId trong query params và khác center của họ -> Forbidden
+                    if (queryParams.CenterId.HasValue && queryParams.CenterId.Value != currentEmployee.CenterId)
+                    {
+                        return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
+                            $"{currentUser.Role} can only view parts from their own service center (Center ID: {currentEmployee.CenterId})."));
+                    }
+                    queryParams.CenterId = currentEmployee.CenterId;
+                }
+
+                var (parts, total) = await _partDao.GetAllPartsAsync(queryParams);
+
+                var dtos = parts.Select(p => new PartResponseDto
+                {
+                    PartId = p.PartId,
+                    PartName = p.PartName,
+                    Description = p.Description,
+                    Price = p.Price,
+                    QuantityInStock = p.QuantityInStock ?? 0,
+                    MinStock = p.MinStock ?? 0,
+                    CenterId = p.CenterId,
+                    Status = string.IsNullOrEmpty(p.Status)
+                        ? PartStatus.Inactive
+                        : Enum.TryParse<PartStatus>(p.Status, out var status)
+                            ? status
+                            : PartStatus.Inactive,
+                    CreatedAt = p.CreatedAt,
+                    UpdatedAt = p.UpdatedAt
+                }).ToList();
+
+                var responseData = new { parts = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
+                return Ok(new ApiResponse<object>(200, "Success", "Parts retrieved successfully.", data: responseData));
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new ApiResponse<object>(400, "BadRequest", ex.Message));
             }
             catch (Exception ex)
             {
@@ -138,10 +225,14 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     PartName = updatedPart.PartName,
                     Description = updatedPart.Description,
                     Price = updatedPart.Price,
-                    QuantityInStock = updatedPart.QuantityInStock!.Value,
-                    MinStock = updatedPart.MinStock!.Value,
+                    QuantityInStock = updatedPart.QuantityInStock ?? 0,
+                    MinStock = updatedPart.MinStock ?? 0,
                     CenterId = updatedPart.CenterId,
-                    Status = Enum.Parse<PartStatus>(updatedPart.Status!),
+                    Status = string.IsNullOrEmpty(updatedPart.Status)
+                        ? PartStatus.Inactive
+                        : Enum.TryParse<PartStatus>(updatedPart.Status, out var status)
+                            ? status
+                            : PartStatus.Inactive,
                     CreatedAt = updatedPart.CreatedAt,
                     UpdatedAt = updatedPart.UpdatedAt
                 };
