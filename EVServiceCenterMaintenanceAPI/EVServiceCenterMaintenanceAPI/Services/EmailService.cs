@@ -1,4 +1,6 @@
-﻿using EVServiceCenterMaintenanceAPI.DTO;
+﻿using System.Net;
+using System.Text.RegularExpressions;
+using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Models;
 using EVServiceCenterMaintenanceAPI.Utils;
 using MailKit.Net.Smtp;
@@ -10,7 +12,7 @@ using SendGrid.Helpers.Mail;
 
 namespace EVServiceCenterMaintenanceAPI.Services
 {
-    public class EmailService
+    public partial class EmailService
     {
         private readonly EmailSetting _emailSetting;
         public EmailService(IOptions<EmailSetting> emailSetting)
@@ -122,23 +124,27 @@ namespace EVServiceCenterMaintenanceAPI.Services
             var apiKey = _emailSetting.Password; // SendGrid API Key
             var client = new SendGridClient(apiKey);
 
-            var from = new EmailAddress("nvkhang0099@gmail.com", _emailSetting.Sender ?? "EV Service Center");
+            var from = new EmailAddress(_emailSetting.Username ?? "noreply@evservicecenter.me",
+                                        _emailSetting.Sender ?? "EV Service Center");
             var to = new EmailAddress(toEmail);
 
             // Create email message
             SendGridMessage msg;
             if (isBodyHtml)
             {
-                msg = MailHelper.CreateSingleEmail(from, to, subject, null, body);
+                var plainText = StripHtml(body);
+                msg = MailHelper.CreateSingleEmail(from, to, subject, plainText, body);
             }
             else
             {
                 msg = MailHelper.CreateSingleEmail(from, to, subject, body, null);
             }
 
+            msg.SetReplyTo(new EmailAddress(_emailSetting.ReplyTo ?? "support@evservicecenter.me", "Support Team"));
+
             var response = await client.SendEmailAsync(msg);
 
-            if (response.StatusCode != System.Net.HttpStatusCode.Accepted)
+            if (response.StatusCode != HttpStatusCode.Accepted)
             {
                 var errorBody = await response.Body.ReadAsStringAsync();
                 throw new InvalidOperationException($"SendGrid API failed: {response.StatusCode} - {errorBody}");
@@ -146,5 +152,15 @@ namespace EVServiceCenterMaintenanceAPI.Services
 
             Console.WriteLine($"Email sent successfully via SendGrid API to {toEmail}");
         }
+
+        private string StripHtml(string html)
+        {
+            if (string.IsNullOrEmpty(html)) return string.Empty;
+            var plainText = HtmlRegex().Replace(html, string.Empty);
+            return WebUtility.HtmlDecode(plainText).Trim();
+        }
+
+        [GeneratedRegex("<.*?>")]
+        private static partial Regex HtmlRegex();
     }
 }

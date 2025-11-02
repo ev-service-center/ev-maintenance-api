@@ -7,6 +7,7 @@
         public required string Username { get; set; }
         public required string Password { get; set; }
         public required string Sender { get; set; }
+        public required string ReplyTo { get; set; }
         public bool UseApi { get; set; } = false; // Use SendGrid API instead of SMTP
     }
 }
