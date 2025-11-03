@@ -1,3 +1,4 @@
+using EVServiceCenterMaintenanceAPI.Background;
 using EVServiceCenterMaintenanceAPI.DAO;
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Extensions;
@@ -99,6 +100,8 @@ builder.Services.AddScoped<PartDao>();
 builder.Services.AddScoped<ServiceCenterDao>();
 builder.Services.AddScoped<EmployeeDao>();
 builder.Services.AddScoped<ReminderDao>();
+builder.Services.AddScoped<AppointmentSlotGeneratorService>();
+builder.Services.AddHostedService<SlotGenerationBackgroundService>();
 
 
 builder.Services.AddScoped<ITokenBlacklistService, TokenBlacklistService>();

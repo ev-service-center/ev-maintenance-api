@@ -400,6 +400,7 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
                     new() {
                         PartName = "Pin xe điện Lithium",
                         Description = "Pin lithium-ion cho xe điện, dung lượng cao, tuổi thọ lâu",
+                        CostPrice = 1050,
                         Price = 1500,
                         QuantityInStock = 50,
                         MinStock = 10,
@@ -411,6 +412,7 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
                     new() {
                         PartName = "Lốp xe điện (bộ 2)",
                         Description = "Lốp chuyên dụng cho xe điện, chống mòn tốt, độ bền cao",
+                        CostPrice = 1400,
                         Price = 2000,
                         QuantityInStock = 80,
                         MinStock = 20,
@@ -422,6 +424,7 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
                     new() {
                         PartName = "Má phanh xe điện",
                         Description = "Má phanh chuyên dụng cho xe điện, hiệu quả phanh cao",
+                        CostPrice = 1300,
                         Price = 2000,
                         QuantityInStock = 100,
                         MinStock = 30,
@@ -433,6 +436,7 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
                     new() {
                         PartName = "Cáp sạc xe điện",
                         Description = "Cáp sạc nhanh cho xe điện, dây dẫn chất lượng cao",
+                        CostPrice = 1200,
                         Price = 2000,
                         QuantityInStock = 70,
                         MinStock = 20,
@@ -444,6 +448,7 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
                     new() {
                         PartName = "Bộ sạc xe điện",
                         Description = "Bộ sạc pin xe điện, sạc nhanh, an toàn",
+                        CostPrice = 2450,
                         Price = 3500,
                         QuantityInStock = 60,
                         MinStock = 15,
@@ -455,6 +460,7 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
                     new() {
                         PartName = "Dây curoa động cơ điện",
                         Description = "Dây curoa truyền động cho động cơ điện",
+                        CostPrice = 1200,
                         Price = 2000,
                         QuantityInStock = 75,
                         MinStock = 25,
@@ -466,6 +472,7 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
                     new() {
                         PartName = "Bộ điều khiển (Controller)",
                         Description = "Bộ điều khiển động cơ điện xe điện",
+                        CostPrice = 1000,
                         Price = 1500,
                         QuantityInStock = 55,
                         MinStock = 15,
@@ -477,6 +484,7 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
                     new() {
                         PartName = "Cảm biến tốc độ",
                         Description = "Cảm biến đo tốc độ cho xe điện",
+                        CostPrice = 900,
                         Price = 1500,
                         QuantityInStock = 65,
                         MinStock = 20,
@@ -488,6 +496,7 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
                     new() {
                         PartName = "Bình nước làm mát",
                         Description = "Bình chứa nước làm mát cho hệ thống động cơ điện",
+                        CostPrice = 1300,
                         Price = 2000,
                         QuantityInStock = 70,
                         MinStock = 20,
@@ -499,6 +508,7 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
                     new() {
                         PartName = "Phin lọc gió",
                         Description = "Phin lọc gió cho hệ thống làm mát động cơ điện",
+                        CostPrice = 950,
                         Price = 1500,
                         QuantityInStock = 90,
                         MinStock = 30,

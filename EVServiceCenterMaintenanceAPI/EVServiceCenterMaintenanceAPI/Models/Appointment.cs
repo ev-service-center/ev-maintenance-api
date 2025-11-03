@@ -21,13 +21,13 @@ public partial class Appointment
 
     public string? Notes { get; set; }
 
+    public decimal? Amount { get; set; }
+
     public int? AssignedTechnicianId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
-
-    public decimal? Amount { get; set; }
 
     public virtual User? AssignedTechnician { get; set; }
 
