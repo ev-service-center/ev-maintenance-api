@@ -39,6 +39,18 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
                 }
 
+                // Validate Status enum
+                if (!Enum.IsDefined(typeof(PartStatus), dto.Status))
+                {
+                    return BadRequest(new ApiResponse<object>(400, "ValidationError", "Invalid Status value. Must be Active or Inactive."));
+                }
+
+                // Validate Price >= CostPrice
+                if (dto.Price < dto.CostPrice)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "ValidationError", "Price cannot be lower than CostPrice. This would result in a loss."));
+                }
+
                 var part = new Part
                 {
                     PartName = dto.PartName,
@@ -298,23 +310,36 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
                 }
 
-                if (id != dto.PartId)
-                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Part ID mismatch."));
-
-                var part = new Part
+                // Validate Status enum
+                if (dto.Status.HasValue && !Enum.IsDefined(typeof(PartStatus), dto.Status.Value))
                 {
-                    PartId = dto.PartId,
-                    PartName = dto.PartName,
-                    Description = dto.Description,
-                    CostPrice = dto.CostPrice,
-                    Price = dto.Price,
-                    QuantityInStock = dto.QuantityInStock,
-                    MinStock = dto.MinStock,
-                    CenterId = dto.CenterId,
-                    Status = dto.Status.ToString()
-                };
+                    return BadRequest(new ApiResponse<object>(400, "ValidationError", "Invalid Status value. Must be Active or Inactive."));
+                }
 
-                var updatedPart = await _partDao.UpdatePartAsync(part);
+                // Get existing part
+                var existingPart = await _partDao.GetPartByIdAsync(id);
+                if (existingPart == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "Part not found."));
+
+                // Validate Price >= CostPrice before updating
+                var finalCostPrice = dto.CostPrice ?? existingPart.CostPrice;
+                var finalPrice = dto.Price ?? existingPart.Price;
+                if (finalPrice < finalCostPrice)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "ValidationError", "Price cannot be lower than CostPrice. This would result in a loss."));
+                }
+
+                // Only update fields that are provided
+                if (dto.PartName != null) existingPart.PartName = dto.PartName;
+                if (dto.Description != null) existingPart.Description = dto.Description;
+                if (dto.CostPrice.HasValue) existingPart.CostPrice = dto.CostPrice.Value;
+                if (dto.Price.HasValue) existingPart.Price = dto.Price.Value;
+                if (dto.QuantityInStock.HasValue) existingPart.QuantityInStock = dto.QuantityInStock.Value;
+                if (dto.MinStock.HasValue) existingPart.MinStock = dto.MinStock.Value;
+                if (dto.CenterId.HasValue) existingPart.CenterId = dto.CenterId.Value;
+                if (dto.Status.HasValue) existingPart.Status = dto.Status.Value.ToString();
+
+                var updatedPart = await _partDao.UpdatePartAsync(existingPart);
 
                 var adminDto = new PartAdminResponseDto
                 {
