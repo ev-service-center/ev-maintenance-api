@@ -11,6 +11,8 @@ public partial class MaintenanceHistory
 
     public int? WorkOrderId { get; set; }
 
+    public int? ServiceId { get; set; }
+
     public DateTime MaintenanceDate { get; set; }
 
     public string? Description { get; set; }
@@ -24,8 +26,6 @@ public partial class MaintenanceHistory
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
-
-    public int? ServiceId { get; set; }
 
     public virtual ICollection<PartUsage> PartUsages { get; set; } = new List<PartUsage>();
 

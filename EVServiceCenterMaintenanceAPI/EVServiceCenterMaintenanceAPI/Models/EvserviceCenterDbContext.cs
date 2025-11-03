@@ -55,7 +55,7 @@ public partial class EvserviceCenterDbContext : DbContext
     {
         modelBuilder.Entity<Appointment>(entity =>
         {
-            entity.HasKey(e => e.AppointmentId).HasName("PK__Appointm__8ECDFCA262FAA542");
+            entity.HasKey(e => e.AppointmentId).HasName("PK__Appointm__8ECDFCA2E2E2CAC6");
 
             entity.ToTable(tb =>
                 {
@@ -76,7 +76,7 @@ public partial class EvserviceCenterDbContext : DbContext
             entity.Property(e => e.AssignedTechnicianId).HasColumnName("AssignedTechnicianID");
             entity.Property(e => e.CenterId).HasColumnName("CenterID");
             entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.CustomerId).HasColumnName("CustomerID");
             entity.Property(e => e.SlotId).HasColumnName("SlotID");
@@ -84,33 +84,33 @@ public partial class EvserviceCenterDbContext : DbContext
                 .HasMaxLength(20)
                 .HasDefaultValue("Pending");
             entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.VehicleId).HasColumnName("VehicleID");
 
             entity.HasOne(d => d.AssignedTechnician).WithMany(p => p.AppointmentAssignedTechnicians)
                 .HasForeignKey(d => d.AssignedTechnicianId)
-                .HasConstraintName("FK__Appointme__Assig__6E01572D");
+                .HasConstraintName("FK__Appointme__Assig__1975C517");
 
             entity.HasOne(d => d.Center).WithMany(p => p.Appointments)
                 .HasForeignKey(d => d.CenterId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Appointme__Cente__6B24EA82");
+                .HasConstraintName("FK__Appointme__Cente__1881A0DE");
 
             entity.HasOne(d => d.Customer).WithMany(p => p.AppointmentCustomers)
                 .HasForeignKey(d => d.CustomerId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Appointme__Custo__693CA210");
+                .HasConstraintName("FK__Appointme__Custo__178D7CA5");
 
             entity.HasOne(d => d.Slot).WithOne(p => p.Appointment)
                 .HasForeignKey<Appointment>(d => d.SlotId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Appointme__SlotI__6D0D32F4");
+                .HasConstraintName("FK__Appointme__SlotI__1699586C");
 
             entity.HasOne(d => d.Vehicle).WithMany(p => p.Appointments)
                 .HasForeignKey(d => d.VehicleId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Appointme__Vehic__6A30C649");
+                .HasConstraintName("FK__Appointme__Vehic__15A53433");
         });
 
         modelBuilder.Entity<AppointmentService>(entity =>
@@ -146,13 +146,13 @@ public partial class EvserviceCenterDbContext : DbContext
             entity.Property(e => e.SlotId).HasColumnName("SlotID");
             entity.Property(e => e.CenterId).HasColumnName("CenterID");
             entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.EndTime).HasColumnType("datetime");
             entity.Property(e => e.IsAvailable).HasDefaultValue(true);
             entity.Property(e => e.StartTime).HasColumnType("datetime");
             entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
 
             entity.HasOne(d => d.Center).WithMany(p => p.AppointmentSlots)
@@ -171,13 +171,13 @@ public partial class EvserviceCenterDbContext : DbContext
 
             entity.Property(e => e.TokenId).HasColumnName("TokenID");
             entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.ExpiresAt).HasColumnType("datetime");
             entity.Property(e => e.TokenType).HasMaxLength(20);
             entity.Property(e => e.TokenValue).HasMaxLength(255);
             entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.UserId).HasColumnName("UserID");
 
@@ -198,14 +198,14 @@ public partial class EvserviceCenterDbContext : DbContext
             entity.Property(e => e.ChatId).HasColumnName("ChatID");
             entity.Property(e => e.ConversationId).HasColumnName("ConversationID");
             entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.SenderId).HasColumnName("SenderID");
             entity.Property(e => e.SentDate)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
 
             entity.HasOne(d => d.Conversation).WithMany(p => p.Chats)
@@ -231,7 +231,7 @@ public partial class EvserviceCenterDbContext : DbContext
 
             entity.Property(e => e.ConversationId).HasColumnName("ConversationID");
             entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.CustomerId).HasColumnName("CustomerID");
             entity.Property(e => e.StaffId).HasColumnName("StaffID");
@@ -239,7 +239,7 @@ public partial class EvserviceCenterDbContext : DbContext
                 .HasMaxLength(20)
                 .HasDefaultValue("Active");
             entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
 
             entity.HasOne(d => d.Customer).WithMany(p => p.ConversationCustomers)
@@ -262,14 +262,14 @@ public partial class EvserviceCenterDbContext : DbContext
                 .HasColumnName("EmployeeID");
             entity.Property(e => e.CenterId).HasColumnName("CenterID");
             entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.PerformanceScore)
                 .HasDefaultValue(0m)
                 .HasColumnType("decimal(5, 2)");
             entity.Property(e => e.Shift).HasMaxLength(50);
             entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
 
             entity.HasOne(d => d.Center).WithMany(p => p.Employees)
@@ -291,18 +291,18 @@ public partial class EvserviceCenterDbContext : DbContext
 
             entity.Property(e => e.InvoiceId).HasColumnName("InvoiceID");
             entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.DueDate).HasColumnType("datetime");
             entity.Property(e => e.IssueDate)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.Status)
                 .HasMaxLength(20)
                 .HasDefaultValue("Unpaid");
             entity.Property(e => e.TotalAmount).HasColumnType("decimal(18, 2)");
             entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
 
             entity.HasOne(d => d.WorkOrder).WithOne(p => p.Invoice)
@@ -313,7 +313,7 @@ public partial class EvserviceCenterDbContext : DbContext
 
         modelBuilder.Entity<MaintenanceHistory>(entity =>
         {
-            entity.HasKey(e => e.HistoryId).HasName("PK__Maintena__4D7B4ADD01A137AD");
+            entity.HasKey(e => e.HistoryId).HasName("PK__Maintena__4D7B4ADD488F658D");
 
             entity.ToTable("MaintenanceHistory");
 
@@ -322,12 +322,12 @@ public partial class EvserviceCenterDbContext : DbContext
             entity.Property(e => e.HistoryId).HasColumnName("HistoryID");
             entity.Property(e => e.Cost).HasColumnType("decimal(18, 2)");
             entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.MaintenanceDate).HasColumnType("datetime");
             entity.Property(e => e.MileageAtMaintenance).HasColumnType("decimal(10, 2)");
             entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.VehicleId).HasColumnName("VehicleID");
 
@@ -338,7 +338,7 @@ public partial class EvserviceCenterDbContext : DbContext
             entity.HasOne(d => d.Vehicle).WithMany(p => p.MaintenanceHistories)
                 .HasForeignKey(d => d.VehicleId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Maintenan__Vehic__75A278F5");
+                .HasConstraintName("FK__Maintenan__Vehic__7EC1CEDB");
 
             entity.HasOne(d => d.WorkOrder).WithMany(p => p.MaintenanceHistories)
                 .HasForeignKey(d => d.WorkOrderId)
@@ -347,12 +347,13 @@ public partial class EvserviceCenterDbContext : DbContext
 
         modelBuilder.Entity<Part>(entity =>
         {
-            entity.HasKey(e => e.PartId).HasName("PK__Parts__7C3F0D307CF30C89");
+            entity.HasKey(e => e.PartId).HasName("PK__Parts__7C3F0D307F2F38C1");
 
             entity.Property(e => e.PartId).HasColumnName("PartID");
             entity.Property(e => e.CenterId).HasColumnName("CenterID");
+            entity.Property(e => e.CostPrice).HasColumnType("decimal(18, 2)");
             entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.MinStock).HasDefaultValue(0);
             entity.Property(e => e.PartName).HasMaxLength(100);
@@ -362,24 +363,25 @@ public partial class EvserviceCenterDbContext : DbContext
                 .HasMaxLength(20)
                 .HasDefaultValue("Active");
             entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
 
             entity.HasOne(d => d.Center).WithMany(p => p.Parts)
                 .HasForeignKey(d => d.CenterId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Parts__CenterID__7F2BE32F");
+                .HasConstraintName("FK__Parts__CenterID__0D0FEE32");
         });
 
         modelBuilder.Entity<PartUsage>(entity =>
         {
-            entity.HasKey(e => e.UsageId).HasName("PK__PartUsag__29B197C0919321E8");
+            entity.HasKey(e => e.UsageId).HasName("PK__PartUsag__29B197C0397CBB8F");
 
             entity.ToTable("PartUsage");
 
             entity.Property(e => e.UsageId).HasColumnName("UsageID");
             entity.Property(e => e.HistoryId).HasColumnName("HistoryID");
             entity.Property(e => e.PartId).HasColumnName("PartID");
+            entity.Property(e => e.UnitCostPrice).HasColumnType("decimal(18, 2)");
             entity.Property(e => e.UnitPrice).HasColumnType("decimal(18, 2)");
 
             entity.HasOne(d => d.History).WithMany(p => p.PartUsages)
@@ -400,15 +402,15 @@ public partial class EvserviceCenterDbContext : DbContext
             entity.Property(e => e.PaymentId).HasColumnName("PaymentID");
             entity.Property(e => e.Amount).HasColumnType("decimal(18, 2)");
             entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.InvoiceId).HasColumnName("InvoiceID");
             entity.Property(e => e.Method).HasMaxLength(50);
             entity.Property(e => e.PaymentDate)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
 
             entity.HasOne(d => d.Invoice).WithMany(p => p.Payments)
@@ -425,14 +427,14 @@ public partial class EvserviceCenterDbContext : DbContext
 
             entity.Property(e => e.ReminderId).HasColumnName("ReminderID");
             entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.ReminderDate).HasColumnType("datetime");
             entity.Property(e => e.ReminderType).HasMaxLength(50);
             entity.Property(e => e.Sent).HasDefaultValue(false);
             entity.Property(e => e.ServiceId).HasColumnName("ServiceID");
             entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.UserId).HasColumnName("UserID");
             entity.Property(e => e.VehicleId).HasColumnName("VehicleID");
@@ -458,7 +460,7 @@ public partial class EvserviceCenterDbContext : DbContext
             entity.Property(e => e.ServiceId).HasColumnName("ServiceID");
             entity.Property(e => e.BasePrice).HasColumnType("decimal(18, 2)");
             entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.ReminderIntervalDays).HasDefaultValue(0);
             entity.Property(e => e.ReminderMileage)
@@ -469,7 +471,7 @@ public partial class EvserviceCenterDbContext : DbContext
                 .HasMaxLength(20)
                 .HasDefaultValue("Active");
             entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
         });
 
@@ -481,7 +483,7 @@ public partial class EvserviceCenterDbContext : DbContext
             entity.Property(e => e.Address).HasMaxLength(255);
             entity.Property(e => e.CenterName).HasMaxLength(100);
             entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.Email).HasMaxLength(100);
             entity.Property(e => e.Phone).HasMaxLength(20);
@@ -489,7 +491,7 @@ public partial class EvserviceCenterDbContext : DbContext
                 .HasMaxLength(20)
                 .HasDefaultValue("Open");
             entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
         });
 
@@ -504,7 +506,7 @@ public partial class EvserviceCenterDbContext : DbContext
             entity.Property(e => e.UserId).HasColumnName("UserID");
             entity.Property(e => e.Avatar).HasMaxLength(255);
             entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.Email).HasMaxLength(100);
             entity.Property(e => e.FullName).HasMaxLength(100);
@@ -515,7 +517,7 @@ public partial class EvserviceCenterDbContext : DbContext
                 .HasMaxLength(20)
                 .HasDefaultValue("Active");
             entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.Username).HasMaxLength(50);
         });
@@ -531,7 +533,7 @@ public partial class EvserviceCenterDbContext : DbContext
             entity.Property(e => e.VehicleId).HasColumnName("VehicleID");
             entity.Property(e => e.Color).HasMaxLength(50);
             entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.CurrentMileage)
                 .HasDefaultValue(0m)
@@ -541,7 +543,7 @@ public partial class EvserviceCenterDbContext : DbContext
             entity.Property(e => e.Model).HasMaxLength(100);
             entity.Property(e => e.Plate).HasMaxLength(20);
             entity.Property(e => e.UpdatedAt)
-                .HasDefaultValueSql("(getdate())")
+                .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.Vin)
                 .HasMaxLength(50)

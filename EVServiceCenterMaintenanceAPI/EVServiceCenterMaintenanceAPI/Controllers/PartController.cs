@@ -26,7 +26,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Staff,Admin")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> CreatePart([FromBody] PartCreateRequestDto dto)
         {
             try
@@ -35,6 +35,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 {
                     PartName = dto.PartName,
                     Description = dto.Description,
+                    CostPrice = dto.CostPrice,
                     Price = dto.Price,
                     QuantityInStock = dto.QuantityInStock,
                     MinStock = dto.MinStock,
@@ -43,11 +44,13 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 };
 
                 var createdPart = await _partDao.CreatePartAsync(part);
-                var createdDto = new PartResponseDto
+
+                var adminDto = new PartAdminResponseDto
                 {
                     PartId = createdPart.PartId,
                     PartName = createdPart.PartName,
                     Description = createdPart.Description,
+                    CostPrice = createdPart.CostPrice,
                     Price = createdPart.Price,
                     QuantityInStock = createdPart.QuantityInStock ?? 0,
                     MinStock = createdPart.MinStock ?? 0,
@@ -61,7 +64,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     UpdatedAt = createdPart.UpdatedAt
                 };
 
-                return CreatedAtAction(nameof(GetPart), new { id = createdPart.PartId }, new ApiResponse<PartResponseDto>(201, "Created", "Part created successfully.", data: createdDto));
+                return CreatedAtAction(nameof(GetPart), new { id = createdPart.PartId }, new ApiResponse<PartAdminResponseDto>(201, "Created", "Part created successfully.", data: adminDto));
             }
             catch (Exception ex)
             {
@@ -100,25 +103,51 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                             $"{currentUser.Role} can only view parts from their own service center (Center ID: {currentEmployee.CenterId})."));
                 }
 
-                var dto = new PartResponseDto
+                // Admin gets full details including CostPrice
+                if (currentUser.Role == UserRole.Admin.ToString())
                 {
-                    PartId = part.PartId,
-                    PartName = part.PartName,
-                    Description = part.Description,
-                    Price = part.Price,
-                    QuantityInStock = part.QuantityInStock ?? 0,
-                    MinStock = part.MinStock ?? 0,
-                    CenterId = part.CenterId,
-                    Status = string.IsNullOrEmpty(part.Status)
-                        ? PartStatus.Inactive
-                        : Enum.TryParse<PartStatus>(part.Status, out var status)
-                            ? status
-                            : PartStatus.Inactive,
-                    CreatedAt = part.CreatedAt,
-                    UpdatedAt = part.UpdatedAt
-                };
-
-                return Ok(new ApiResponse<PartResponseDto>(200, "Success", "Part retrieved successfully.", data: dto));
+                    var adminDto = new PartAdminResponseDto
+                    {
+                        PartId = part.PartId,
+                        PartName = part.PartName,
+                        Description = part.Description,
+                        CostPrice = part.CostPrice,
+                        Price = part.Price,
+                        QuantityInStock = part.QuantityInStock ?? 0,
+                        MinStock = part.MinStock ?? 0,
+                        CenterId = part.CenterId,
+                        Status = string.IsNullOrEmpty(part.Status)
+                            ? PartStatus.Inactive
+                            : Enum.TryParse<PartStatus>(part.Status, out var status)
+                                ? status
+                                : PartStatus.Inactive,
+                        CreatedAt = part.CreatedAt,
+                        UpdatedAt = part.UpdatedAt
+                    };
+                    return Ok(new ApiResponse<PartAdminResponseDto>(200, "Success", "Part retrieved successfully.", data: adminDto));
+                }
+                else
+                {
+                    // Staff/Technician gets basic details without CostPrice
+                    var dto = new PartResponseDto
+                    {
+                        PartId = part.PartId,
+                        PartName = part.PartName,
+                        Description = part.Description,
+                        Price = part.Price,
+                        QuantityInStock = part.QuantityInStock ?? 0,
+                        MinStock = part.MinStock ?? 0,
+                        CenterId = part.CenterId,
+                        Status = string.IsNullOrEmpty(part.Status)
+                            ? PartStatus.Inactive
+                            : Enum.TryParse<PartStatus>(part.Status, out var status)
+                                ? status
+                                : PartStatus.Inactive,
+                        CreatedAt = part.CreatedAt,
+                        UpdatedAt = part.UpdatedAt
+                    };
+                    return Ok(new ApiResponse<PartResponseDto>(200, "Success", "Part retrieved successfully.", data: dto));
+                }
             }
             catch (Exception ex)
             {
@@ -167,26 +196,55 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 
                 var (parts, total) = await _partDao.GetAllPartsAsync(queryParams);
 
-                var dtos = parts.Select(p => new PartResponseDto
+                // Admin gets full details including CostPrice
+                if (currentUser.Role == UserRole.Admin.ToString())
                 {
-                    PartId = p.PartId,
-                    PartName = p.PartName,
-                    Description = p.Description,
-                    Price = p.Price,
-                    QuantityInStock = p.QuantityInStock ?? 0,
-                    MinStock = p.MinStock ?? 0,
-                    CenterId = p.CenterId,
-                    Status = string.IsNullOrEmpty(p.Status)
-                        ? PartStatus.Inactive
-                        : Enum.TryParse<PartStatus>(p.Status, out var status)
-                            ? status
-                            : PartStatus.Inactive,
-                    CreatedAt = p.CreatedAt,
-                    UpdatedAt = p.UpdatedAt
-                }).ToList();
+                    var adminDtos = parts.Select(p => new PartAdminResponseDto
+                    {
+                        PartId = p.PartId,
+                        PartName = p.PartName,
+                        Description = p.Description,
+                        CostPrice = p.CostPrice,
+                        Price = p.Price,
+                        QuantityInStock = p.QuantityInStock ?? 0,
+                        MinStock = p.MinStock ?? 0,
+                        CenterId = p.CenterId,
+                        Status = string.IsNullOrEmpty(p.Status)
+                            ? PartStatus.Inactive
+                            : Enum.TryParse<PartStatus>(p.Status, out var status)
+                                ? status
+                                : PartStatus.Inactive,
+                        CreatedAt = p.CreatedAt,
+                        UpdatedAt = p.UpdatedAt
+                    }).ToList();
 
-                var responseData = new { parts = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
-                return Ok(new ApiResponse<object>(200, "Success", "Parts retrieved successfully.", data: responseData));
+                    var adminResponseData = new { parts = adminDtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
+                    return Ok(new ApiResponse<object>(200, "Success", "Parts retrieved successfully.", data: adminResponseData));
+                }
+                else
+                {
+                    // Staff/Technician gets basic details without CostPrice
+                    var dtos = parts.Select(p => new PartResponseDto
+                    {
+                        PartId = p.PartId,
+                        PartName = p.PartName,
+                        Description = p.Description,
+                        Price = p.Price,
+                        QuantityInStock = p.QuantityInStock ?? 0,
+                        MinStock = p.MinStock ?? 0,
+                        CenterId = p.CenterId,
+                        Status = string.IsNullOrEmpty(p.Status)
+                            ? PartStatus.Inactive
+                            : Enum.TryParse<PartStatus>(p.Status, out var status)
+                                ? status
+                                : PartStatus.Inactive,
+                        CreatedAt = p.CreatedAt,
+                        UpdatedAt = p.UpdatedAt
+                    }).ToList();
+
+                    var responseData = new { parts = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
+                    return Ok(new ApiResponse<object>(200, "Success", "Parts retrieved successfully.", data: responseData));
+                }
             }
             catch (ArgumentException ex)
             {
@@ -214,7 +272,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         }
 
         [HttpPut("{id}")]
-        [Authorize(Roles = "Staff,Admin")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> UpdatePart(int id, [FromBody] PartUpdateRequestDto dto)
         {
             try
@@ -232,6 +290,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     PartId = dto.PartId,
                     PartName = dto.PartName,
                     Description = dto.Description,
+                    CostPrice = dto.CostPrice,
                     Price = dto.Price,
                     QuantityInStock = dto.QuantityInStock,
                     MinStock = dto.MinStock,
@@ -240,11 +299,13 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 };
 
                 var updatedPart = await _partDao.UpdatePartAsync(part);
-                var updatedDto = new PartResponseDto
+
+                var adminDto = new PartAdminResponseDto
                 {
                     PartId = updatedPart.PartId,
                     PartName = updatedPart.PartName,
                     Description = updatedPart.Description,
+                    CostPrice = updatedPart.CostPrice,
                     Price = updatedPart.Price,
                     QuantityInStock = updatedPart.QuantityInStock ?? 0,
                     MinStock = updatedPart.MinStock ?? 0,
@@ -258,7 +319,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     UpdatedAt = updatedPart.UpdatedAt
                 };
 
-                return Ok(new ApiResponse<PartResponseDto>(200, "Success", "Part updated successfully.", data: updatedDto));
+                return Ok(new ApiResponse<PartAdminResponseDto>(200, "Success", "Part updated successfully.", data: adminDto));
             }
             catch (Exception ex)
             {
