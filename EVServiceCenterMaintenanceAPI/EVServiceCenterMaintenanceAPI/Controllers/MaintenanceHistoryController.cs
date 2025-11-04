@@ -120,5 +120,34 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
             }
         }
+
+        [HttpGet("vehicle/{vehicleId}")]
+        [Authorize(Roles = "Customer,Staff,Technician,Admin")]
+        public async Task<IActionResult> GetMaintenanceHistoriesByVehicle(int vehicleId)
+        {
+            try
+            {
+                var histories = await _maintenanceHistoryDao.GetMaintenanceHistoriesByVehicleIdAsync(vehicleId);
+                var dtos = histories.Select(h => new MaintenanceHistoryResponseDto
+                {
+                    HistoryId = h.HistoryId,
+                    VehicleId = h.VehicleId,
+                    AppointmentId = h.AppointmentId,
+                    MaintenanceDate = h.MaintenanceDate,
+                    Description = h.Description,
+                    Notes = h.Notes,
+                    Cost = h.Cost,
+                    MileageAtMaintenance = h.MileageAtMaintenance,
+                    CreatedAt = h.CreatedAt,
+                    UpdatedAt = h.UpdatedAt
+                }).ToList();
+
+                return Ok(new ApiResponse<List<MaintenanceHistoryResponseDto>>(200, "Success", "Maintenance histories retrieved successfully.", data: dtos));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
     }
 }

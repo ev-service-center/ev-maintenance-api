@@ -86,5 +86,15 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
             return (histories, total);
         }
+
+        public async Task<List<MaintenanceHistory>> GetMaintenanceHistoriesByVehicleIdAsync(int vehicleId)
+        {
+            return await _context.MaintenanceHistories
+                .Where(h => h.VehicleId == vehicleId)
+                .Include(h => h.PartUsages)
+                .ThenInclude(pu => pu.Part)
+                .OrderByDescending(h => h.MaintenanceDate)
+                .ToListAsync();
+        }
     }
 }
