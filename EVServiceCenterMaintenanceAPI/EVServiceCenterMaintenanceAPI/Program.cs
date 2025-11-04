@@ -73,6 +73,9 @@ builder.Services.AddCors(options =>
 // Register DAOs and Services
 builder.Services.AddScoped<UserDao>();
 builder.Services.AddScoped<AuthDao>();
+builder.Services.AddScoped<AuthTokenDao>();
+builder.Services.AddScoped<ServiceCenterDao>();
+builder.Services.AddScoped<VehicleDao>();
 builder.Services.AddScoped<EmailService>();
 builder.Services.Configure<EmailSetting>(builder.Configuration.GetSection("EmailSettings"));
 builder.Services.AddScoped<ImageService>();
