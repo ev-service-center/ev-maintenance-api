@@ -123,5 +123,26 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 throw new Exception($"Failed to update maintenance history with ID {history.HistoryId}.", ex);
             }
         }
+
+        public async Task<bool> DeleteMaintenanceHistoryAsync(int historyId)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var history = await _context.MaintenanceHistories.FindAsync(historyId);
+                if (history == null)
+                    return false;
+
+                _context.MaintenanceHistories.Remove(history);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception($"Failed to delete maintenance history with ID {historyId}.", ex);
+            }
+        }
     }
 }
