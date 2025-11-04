@@ -1,4 +1,5 @@
 ﻿using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.EntityFrameworkCore;
 
 namespace EVServiceCenterMaintenanceAPI.DAO
@@ -37,6 +38,53 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 .Include(h => h.PartUsages)
                 .ThenInclude(pu => pu.Part)
                 .FirstOrDefaultAsync(h => h.HistoryId == historyId);
+        }
+
+        public async Task<(List<MaintenanceHistory> Histories, int Total)> GetAllMaintenanceHistoriesAsync(MaintenanceHistoryQueryParams queryParams)
+        {
+            var validation = queryParams.Validate();
+            if (!validation.IsValid)
+            {
+                throw new ArgumentException(validation.ErrorMessage);
+            }
+
+            var query = _context.MaintenanceHistories
+                .Include(h => h.PartUsages)
+                .AsQueryable();
+
+            if (!string.IsNullOrEmpty(queryParams.Search))
+                query = query.Where(h => h.Description.Contains(queryParams.Search) || h.Notes.Contains(queryParams.Search));
+            if (queryParams.VehicleId.HasValue)
+                query = query.Where(h => h.VehicleId == queryParams.VehicleId.Value);
+            if (queryParams.FromDate.HasValue)
+                query = query.Where(h => h.MaintenanceDate >= queryParams.FromDate.Value);
+            if (queryParams.ToDate.HasValue)
+                query = query.Where(h => h.MaintenanceDate <= queryParams.ToDate.Value);
+
+            if (!string.IsNullOrEmpty(queryParams.SortBy))
+            {
+                bool isAscending = queryParams.SortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase);
+                switch (queryParams.SortBy.ToLower())
+                {
+                    case "maintenancedate":
+                        query = isAscending ? query.OrderBy(h => h.MaintenanceDate) : query.OrderByDescending(h => h.MaintenanceDate);
+                        break;
+                    case "cost":
+                        query = isAscending ? query.OrderBy(h => h.Cost) : query.OrderByDescending(h => h.Cost);
+                        break;
+                    default:
+                        query = isAscending ? query.OrderBy(h => h.HistoryId) : query.OrderByDescending(h => h.HistoryId);
+                        break;
+                }
+            }
+
+            var total = await query.CountAsync();
+            var histories = await query
+                .Skip((queryParams.Page - 1) * queryParams.PageSize)
+                .Take(queryParams.PageSize)
+                .ToListAsync();
+
+            return (histories, total);
         }
     }
 }

@@ -1,6 +1,7 @@
 ﻿using EVServiceCenterMaintenanceAPI.DAO;
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -82,6 +83,37 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 };
 
                 return Ok(new ApiResponse<MaintenanceHistoryResponseDto>(200, "Success", "Maintenance history retrieved successfully.", data: dto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpGet]
+        [Authorize(Roles = "Staff,Admin")]
+        public async Task<IActionResult> GetAllMaintenanceHistories([FromQuery] MaintenanceHistoryQueryParams queryParams)
+        {
+            try
+            {
+                var (histories, total) = await _maintenanceHistoryDao.GetAllMaintenanceHistoriesAsync(queryParams);
+
+                var dtos = histories.Select(h => new MaintenanceHistoryResponseDto
+                {
+                    HistoryId = h.HistoryId,
+                    VehicleId = h.VehicleId,
+                    AppointmentId = h.AppointmentId,
+                    MaintenanceDate = h.MaintenanceDate,
+                    Description = h.Description,
+                    Notes = h.Notes,
+                    Cost = h.Cost,
+                    MileageAtMaintenance = h.MileageAtMaintenance,
+                    CreatedAt = h.CreatedAt,
+                    UpdatedAt = h.UpdatedAt
+                }).ToList();
+
+                var responseData = new { histories = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
+                return Ok(new ApiResponse<object>(200, "Success", "Maintenance histories retrieved successfully.", data: responseData));
             }
             catch (Exception ex)
             {
