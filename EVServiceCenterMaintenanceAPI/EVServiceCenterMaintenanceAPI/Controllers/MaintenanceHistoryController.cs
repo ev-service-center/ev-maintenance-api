@@ -149,5 +149,49 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
             }
         }
+
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Technician,Admin")]
+        public async Task<IActionResult> UpdateMaintenanceHistory(int id, [FromBody] MaintenanceHistoryUpdateRequestDto dto)
+        {
+            try
+            {
+                if (id != dto.HistoryId)
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Maintenance history ID mismatch."));
+
+                var history = new MaintenanceHistory
+                {
+                    HistoryId = dto.HistoryId,
+                    VehicleId = dto.VehicleId,
+                    AppointmentId = dto.AppointmentId,
+                    MaintenanceDate = dto.MaintenanceDate,
+                    Description = dto.Description,
+                    Notes = dto.Notes,
+                    Cost = dto.Cost,
+                    MileageAtMaintenance = dto.MileageAtMaintenance
+                };
+
+                var updatedHistory = await _maintenanceHistoryDao.UpdateMaintenanceHistoryAsync(history);
+                var updatedDto = new MaintenanceHistoryResponseDto
+                {
+                    HistoryId = updatedHistory.HistoryId,
+                    VehicleId = updatedHistory.VehicleId,
+                    AppointmentId = updatedHistory.AppointmentId,
+                    MaintenanceDate = updatedHistory.MaintenanceDate,
+                    Description = updatedHistory.Description,
+                    Notes = updatedHistory.Notes,
+                    Cost = updatedHistory.Cost,
+                    MileageAtMaintenance = updatedHistory.MileageAtMaintenance,
+                    CreatedAt = updatedHistory.CreatedAt,
+                    UpdatedAt = updatedHistory.UpdatedAt
+                };
+
+                return Ok(new ApiResponse<MaintenanceHistoryResponseDto>(200, "Success", "Maintenance history updated successfully.", data: updatedDto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
     }
 }

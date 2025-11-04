@@ -96,5 +96,32 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 .OrderByDescending(h => h.MaintenanceDate)
                 .ToListAsync();
         }
+
+        public async Task<MaintenanceHistory> UpdateMaintenanceHistoryAsync(MaintenanceHistory history)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var existingHistory = await _context.MaintenanceHistories.FirstOrDefaultAsync(h => h.HistoryId == history.HistoryId);
+                if (existingHistory == null)
+                    throw new Exception($"Maintenance history with ID {history.HistoryId} not found.");
+
+                existingHistory.MaintenanceDate = history.MaintenanceDate;
+                existingHistory.Description = history.Description;
+                existingHistory.Notes = history.Notes;
+                existingHistory.Cost = history.Cost;
+                existingHistory.MileageAtMaintenance = history.MileageAtMaintenance;
+                existingHistory.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return existingHistory;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception($"Failed to update maintenance history with ID {history.HistoryId}.", ex);
+            }
+        }
     }
 }
