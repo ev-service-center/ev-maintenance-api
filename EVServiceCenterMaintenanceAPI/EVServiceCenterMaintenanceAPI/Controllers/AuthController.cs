@@ -16,7 +16,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class AuthController : Controller
+    public class AuthController : ControllerBase
     {
         private readonly UserDao _userDao;
         private readonly AuthDao _authDao;
