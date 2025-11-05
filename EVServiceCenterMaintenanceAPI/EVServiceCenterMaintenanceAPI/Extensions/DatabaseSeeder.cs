@@ -1,5 +1,6 @@
 ﻿using EVServiceCenterMaintenanceAPI.DAO;
 using EVServiceCenterMaintenanceAPI.Enums;
+using EVServiceCenterMaintenanceAPI.Helpers;
 using EVServiceCenterMaintenanceAPI.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -309,7 +310,9 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
                 Console.WriteLine("Appointment slots already exist. Skipping seeding.");
                 return;
             }
-            // Lấy tất cả service centers
+
+            Console.WriteLine("Seeding appointment slots for 7 days...");
+
             var serviceCenters = await context.ServiceCenters.ToListAsync();
             if (serviceCenters.Count == 0)
             {
@@ -318,9 +321,8 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
             }
 
             var slots = new List<AppointmentSlot>();
-            var vnNow = DateTime.UtcNow.AddHours(7);
-            var startDate = vnNow.Date;
-            var endDate = startDate.AddDays(2);
+            var startDate = TimeZoneHelper.TodayInVietnam;
+            var endDate = startDate.AddDays(6);
 
             foreach (var center in serviceCenters)
             {
@@ -364,7 +366,7 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
             {
                 await context.AppointmentSlots.AddRangeAsync(slots);
                 await context.SaveChangesAsync();
-                Console.WriteLine($"Successfully seeded {slots.Count} appointment slots for {serviceCenters.Count} service centers!");
+                Console.WriteLine($"Successfully seeded {slots.Count} appointment slots for {serviceCenters.Count} centers over 7 days!");
             }
             catch (Exception ex)
             {

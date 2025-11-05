@@ -79,10 +79,10 @@ namespace EVServiceCenterMaintenanceAPI.Background
                 currentTime.ToString("yyyy-MM-dd HH:mm:ss"), currentTime.DayOfWeek);
 
             var startTime = DateTime.UtcNow;
-            await slotGenerator.GenerateSlotsForTodayAndTomorrowAsync();
+            await slotGenerator.GenerateSlotsForNext7DaysAsync();
             var duration = DateTime.UtcNow - startTime;
 
-            _logger.LogInformation("=== Tạo slot hoàn thành trong {duration}ms ===",
+            _logger.LogInformation("=== Tạo slot cho 7 ngày tới hoàn thành trong {duration}ms ===",
                 duration.TotalMilliseconds);
         }
 

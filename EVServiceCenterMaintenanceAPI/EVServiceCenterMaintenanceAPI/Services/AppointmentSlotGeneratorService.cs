@@ -18,19 +18,17 @@ namespace EVServiceCenterMaintenanceAPI.Services
             _logger = logger;
         }
 
-        public async Task GenerateSlotsForTodayAndTomorrowAsync()
+        public async Task GenerateSlotsForNext7DaysAsync()
         {
             try
             {
                 var today = TimeZoneHelper.TodayInVietnam;
 
-                // Kiểm tra xem đã có slot cho hôm nay chưa (để xác định lần chạy đầu tiên)
-                var hasTodaySlots = await _context.AppointmentSlots
-                    .AnyAsync(s => s.StartTime.Date == today.Date);
-
-                var candidateDates = hasTodaySlots
-                    ? new[] { today.AddDays(1) }  // Chỉ tạo ngày mai
-                    : new[] { today, today.AddDays(1) }; // Tạo cả hôm nay và ngày mai
+                // Tạo slots cho 7 ngày tới (bao gồm cả hôm nay)
+                // Rolling window: Mỗi ngày tạo thêm 1 ngày mới vào cuối
+                var candidateDates = Enumerable.Range(0, 7)
+                    .Select(i => today.AddDays(i))
+                    .ToArray();
 
                 // Chỉ tạo slot cho các ngày từ Monday đến Saturday (bỏ qua Sunday)
                 var datesToGenerate = candidateDates
@@ -51,8 +49,8 @@ namespace EVServiceCenterMaintenanceAPI.Services
                     return;
                 }
 
-                _logger.LogInformation("Kiểm tra slot hôm nay: {hasToday}, sẽ tạo slot cho các ngày: {dates}",
-                    hasTodaySlots, string.Join(", ", datesToGenerate.Select(d => $"{d:dd/MM} ({d.DayOfWeek})")));
+                _logger.LogInformation("Sẽ tạo slot cho 7 ngày tới: {dates}",
+                    string.Join(", ", datesToGenerate.Select(d => $"{d:dd/MM} ({d.DayOfWeek})")));
 
                 // Lấy danh sách trung tâm
                 var centerIds = await _context.ServiceCenters

@@ -21,9 +21,6 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             _logger = logger;
         }
 
-        /// <summary>
-        /// Trigger tạo slot cho hôm nay và ngày mai (cho test hoặc manual trigger)
-        /// </summary>
         [HttpPost("generate-slots")]
         public async Task<IActionResult> GenerateSlots()
         {
@@ -31,12 +28,12 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             {
                 _logger.LogInformation("Admin đang trigger tạo slot thủ công...");
 
-                await _slotGenerator.GenerateSlotsForTodayAndTomorrowAsync();
+                await _slotGenerator.GenerateSlotsForNext7DaysAsync();
 
                 return Ok(new ApiResponse<string>(
                     200,
                     "Success",
-                    "Đã tạo slot thành công cho hôm nay và ngày mai (nếu là Mon-Sat)",
+                    "Đã tạo slot thành công cho 7 ngày tới (bỏ qua Chủ nhật)",
                     null,
                     "Kiểm tra logs để xem chi tiết số lượng slot đã tạo"
                 ));
@@ -52,9 +49,6 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Tạo slot cho một ngày cụ thể (format: yyyy-MM-dd)
-        /// </summary>
         [HttpPost("generate-slots/{date}")]
         public async Task<IActionResult> GenerateSlotsForDate(string date)
         {

@@ -12,7 +12,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class EmployeeController : Controller
+    public class EmployeeController : ControllerBase
     {
         private readonly EmployeeDao _employeeDao;
         private readonly UserDao _userDao;
