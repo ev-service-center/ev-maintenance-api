@@ -1,4 +1,5 @@
-﻿using EVServiceCenterMaintenanceAPI.Models;
+﻿using EVServiceCenterMaintenanceAPI.Enums;
+using EVServiceCenterMaintenanceAPI.Models;
 using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.EntityFrameworkCore;
 
@@ -135,6 +136,14 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 await transaction.RollbackAsync();
                 throw new Exception($"Failed to update service center with ID {center.CenterId}: {ex.Message}", ex);
             }
+        }
+
+        public async Task<ServiceCenter?> GetActiveServiceCenterByIdAsync(int centerId)
+        {
+            return await _context.ServiceCenters
+                .Include(c => c.Appointments)
+                .Include(c => c.Parts)
+                .FirstOrDefaultAsync(c => c.CenterId == centerId && c.Status == ServiceCenterStatus.Open.ToString());
         }
     }
 }

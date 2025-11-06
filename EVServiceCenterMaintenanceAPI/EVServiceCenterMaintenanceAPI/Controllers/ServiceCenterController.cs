@@ -191,5 +191,34 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to update service center: {ex.Message}"));
             }
         }
+
+        [HttpGet("active/{id}")]
+        public async Task<IActionResult> GetActiveServiceCenter(int id)
+        {
+            try
+            {
+                var center = await _serviceCenterDao.GetActiveServiceCenterByIdAsync(id);
+                if (center == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "Active service center not found."));
+
+                var dto = new ServiceCenterResponseDto
+                {
+                    CenterId = center.CenterId,
+                    CenterName = center.CenterName,
+                    Address = center.Address,
+                    Phone = center.Phone,
+                    Email = center.Email,
+                    Status = Enum.Parse<ServiceCenterStatus>(center.Status),
+                    CreatedAt = center.CreatedAt,
+                    UpdatedAt = center.UpdatedAt
+                };
+
+                return Ok(new ApiResponse<ServiceCenterResponseDto>(200, "Success", "Active service center retrieved successfully.", data: dto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to retrieve active service center: {ex.Message}"));
+            }
+        }
     }
 }
