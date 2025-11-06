@@ -29,6 +29,14 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             try
             {
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState
+                        .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
+                    return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+                }
+
                 var vehicle = new Vehicle
                 {
                     CustomerId = dto.CustomerId,
@@ -169,6 +177,14 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             try
             {
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState
+                        .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
+                    return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+                }
+
                 if (id != dto.VehicleId)
                     return BadRequest(new ApiResponse<object>(400, "BadRequest", "Vehicle ID mismatch."));
 

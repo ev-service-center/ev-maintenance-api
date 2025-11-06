@@ -7,7 +7,8 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         public int VehicleId { get; set; }
         public int CustomerId { get; set; }
         [Required, StringLength(100)] public string Model { get; set; } = null!;
-        [Required, StringLength(50)] public string VIN { get; set; } = null!;
+        [Required, StringLength(50), RegularExpression(@"^[A-HJ-NPR-Z0-9]{17}$", ErrorMessage = "VIN must be 17 characters.")]
+        public string VIN { get; set; } = null!;
         public int? ManufactureYear { get; set; }
         public decimal CurrentMileage { get; set; }
         public DateTime? LastMaintenanceDate { get; set; }
