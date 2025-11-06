@@ -143,5 +143,53 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to delete service center: {ex.Message}"));
             }
         }
+
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> UpdateServiceCenter(int id, [FromBody] ServiceCenterUpdateRequestDto dto)
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState
+                            .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
+                return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+            }
+
+            try
+            {
+                if (id != dto.CenterId)
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Service center ID mismatch."));
+
+                var center = new ServiceCenter
+                {
+                    CenterId = dto.CenterId,
+                    CenterName = dto.CenterName,
+                    Address = dto.Address,
+                    Phone = dto.Phone,
+                    Email = dto.Email,
+                    Status = dto.Status.ToString()
+                };
+
+                var updatedCenter = await _serviceCenterDao.UpdateServiceCenterAsync(center);
+                var updatedDto = new ServiceCenterResponseDto
+                {
+                    CenterId = updatedCenter.CenterId,
+                    CenterName = updatedCenter.CenterName,
+                    Address = updatedCenter.Address,
+                    Phone = updatedCenter.Phone,
+                    Email = updatedCenter.Email,
+                    Status = Enum.Parse<ServiceCenterStatus>(updatedCenter.Status),
+                    CreatedAt = updatedCenter.CreatedAt,
+                    UpdatedAt = updatedCenter.UpdatedAt
+                };
+
+                return Ok(new ApiResponse<ServiceCenterResponseDto>(200, "Success", "Service center updated successfully.", data: updatedDto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to update service center: {ex.Message}"));
+            }
+        }
     }
 }

@@ -109,5 +109,32 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             center.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
         }
+
+        public async Task<ServiceCenter> UpdateServiceCenterAsync(ServiceCenter center)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var existingCenter = await _context.ServiceCenters.FirstOrDefaultAsync(c => c.CenterId == center.CenterId);
+                if (existingCenter == null)
+                    throw new Exception($"Service center with ID {center.CenterId} not found.");
+
+                existingCenter.CenterName = center.CenterName;
+                existingCenter.Address = center.Address;
+                existingCenter.Phone = center.Phone;
+                existingCenter.Email = center.Email;
+                existingCenter.Status = center.Status;
+                existingCenter.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return existingCenter;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception($"Failed to update service center with ID {center.CenterId}: {ex.Message}", ex);
+            }
+        }
     }
 }
