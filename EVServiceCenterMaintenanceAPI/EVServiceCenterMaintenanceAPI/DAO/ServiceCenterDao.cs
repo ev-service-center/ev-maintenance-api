@@ -145,5 +145,53 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 .Include(c => c.Parts)
                 .FirstOrDefaultAsync(c => c.CenterId == centerId && c.Status == ServiceCenterStatus.Open.ToString());
         }
+
+        public async Task<(List<ServiceCenter> Centers, int Total)> GetAllActiveServiceCentersAsync(ServiceCenterQueryParams queryParams)
+        {
+            var validation = queryParams.Validate();
+            if (!validation.IsValid)
+            {
+                throw new ArgumentException(validation.ErrorMessage);
+            }
+
+            var query = _context.ServiceCenters
+                .Where(c => c.Status == ServiceCenterStatus.Open.ToString())
+                .AsQueryable();
+
+            if (!string.IsNullOrEmpty(queryParams.Search))
+                query = query.Where(c => c.CenterName.Contains(queryParams.Search) || c.Address.Contains(queryParams.Search));
+            if (queryParams.FromDate.HasValue)
+                query = query.Where(c => c.CreatedAt >= queryParams.FromDate.Value);
+            if (queryParams.ToDate.HasValue)
+                query = query.Where(c => c.CreatedAt <= queryParams.ToDate.Value);
+
+            if (!string.IsNullOrEmpty(queryParams.SortBy))
+            {
+                bool isAscending = queryParams.SortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase);
+                switch (queryParams.SortBy.ToLower())
+                {
+                    case "centername":
+                        query = isAscending ? query.OrderBy(c => c.CenterName) : query.OrderByDescending(c => c.CenterName);
+                        break;
+                    case "address":
+                        query = isAscending ? query.OrderBy(c => c.Address) : query.OrderByDescending(c => c.Address);
+                        break;
+                    case "createdat":
+                        query = isAscending ? query.OrderBy(c => c.CreatedAt) : query.OrderByDescending(c => c.CreatedAt);
+                        break;
+                    default:
+                        query = isAscending ? query.OrderBy(c => c.CenterId) : query.OrderByDescending(c => c.CenterId);
+                        break;
+                }
+            }
+
+            var total = await query.CountAsync();
+            var centers = await query
+                .Skip((queryParams.Page - 1) * queryParams.PageSize)
+                .Take(queryParams.PageSize)
+                .ToListAsync();
+
+            return (centers, total);
+        }
     }
 }

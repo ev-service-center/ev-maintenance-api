@@ -220,5 +220,33 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to retrieve active service center: {ex.Message}"));
             }
         }
+
+        [HttpGet("active")]
+        public async Task<IActionResult> GetAllActiveServiceCenters([FromQuery] ServiceCenterQueryParams queryParams)
+        {
+            try
+            {
+                var (centers, total) = await _serviceCenterDao.GetAllActiveServiceCentersAsync(queryParams);
+
+                var dtos = centers.Select(c => new ServiceCenterResponseDto
+                {
+                    CenterId = c.CenterId,
+                    CenterName = c.CenterName,
+                    Address = c.Address,
+                    Phone = c.Phone,
+                    Email = c.Email,
+                    Status = Enum.Parse<ServiceCenterStatus>(c.Status),
+                    CreatedAt = c.CreatedAt,
+                    UpdatedAt = c.UpdatedAt
+                }).ToList();
+
+                var responseData = new { centers = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
+                return Ok(new ApiResponse<object>(200, "Success", "Active service centers retrieved successfully.", data: responseData));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to retrieve active service centers: {ex.Message}"));
+            }
+        }
     }
 }
