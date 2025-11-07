@@ -10,7 +10,7 @@ namespace EVServiceCenterMaintenanceAPI.Services
         private readonly HttpClient _httpClient;
         private readonly IConfiguration _configuration;
         private readonly ILogger<AiSuggestionService> _logger;
-        private readonly List<string> _geminiModels = new() { "gemini-2.0-flash", "gemini-2.5-flash" };
+        private readonly List<string> _geminiModels = ["gemini-2.0-flash", "gemini-2.5-flash"];
         private readonly List<GeminiApiKey> _apiKeys;
 
         public AiSuggestionService(HttpClient httpClient, IConfiguration configuration, ILogger<AiSuggestionService> logger)
@@ -114,7 +114,7 @@ namespace EVServiceCenterMaintenanceAPI.Services
                         {
                             if (parts.GetArrayLength() > 0 && parts[0].TryGetProperty("text", out var textProp))
                             {
-                                return textProp.GetString();
+                                return textProp.GetString() ?? string.Empty;
                             }
                         }
                     }
@@ -161,45 +161,48 @@ namespace EVServiceCenterMaintenanceAPI.Services
 
         private async Task<List<PartAiSuggestionDto>> GetFallbackPartSuggestionsAsync(List<PartAiUsageHistoryDto> usageHistory, int centerId)
         {
-            var suggestions = new List<PartAiSuggestionDto>();
-            var oneMonthAgo = DateTime.UtcNow.AddMonths(-1);
-
-            var groupedUsage = usageHistory
-                .Where(u => u.Date >= oneMonthAgo) // Consider last 30 days
-                .GroupBy(u => u.PartId)
-                .Select(g => new
-                {
-                    PartId = g.Key,
-                    PartName = usageHistory.First(u => u.PartId == g.Key).PartName,
-                    AvgMonthlyUsage = g.Average(u => u.QuantityUsed),
-                    TotalUsed = g.Sum(u => u.QuantityUsed)
-                });
-
-            foreach (var group in groupedUsage)
+            return await Task.Run(() =>
             {
-                // Determine usage trend based on total usage in the last month
-                string usageTrend = group.TotalUsed switch
+                var suggestions = new List<PartAiSuggestionDto>();
+                var oneMonthAgo = DateTime.UtcNow.AddMonths(-1);
+
+                var groupedUsage = usageHistory
+                    .Where(u => u.Date >= oneMonthAgo) // Consider last 30 days
+                    .GroupBy(u => u.PartId)
+                    .Select(g => new
+                    {
+                        PartId = g.Key,
+                        PartName = usageHistory.First(u => u.PartId == g.Key).PartName,
+                        AvgMonthlyUsage = g.Average(u => u.QuantityUsed),
+                        TotalUsed = g.Sum(u => u.QuantityUsed)
+                    });
+
+                foreach (var group in groupedUsage)
                 {
-                    > 50 => "high",
-                    >= 10 => "medium",
-                    _ => "low"
-                };
+                    // Determine usage trend based on total usage in the last month
+                    string usageTrend = group.TotalUsed switch
+                    {
+                        > 50 => "high",
+                        >= 10 => "medium",
+                        _ => "low"
+                    };
 
-                // Calculate suggested stock: 1.5x average monthly usage + 20% safety stock
-                int suggestedMinStock = (int)Math.Ceiling(group.AvgMonthlyUsage * 1.5 * 1.2);
+                    // Calculate suggested stock: 1.5x average monthly usage + 20% safety stock
+                    int suggestedMinStock = (int)Math.Ceiling(group.AvgMonthlyUsage * 1.5 * 1.2);
 
-                suggestions.Add(new PartAiSuggestionDto
-                {
-                    PartId = group.PartId,
-                    PartName = group.PartName,
-                    CurrentUsageTrend = usageTrend,
-                    SuggestedMinStock = suggestedMinStock,
-                    Reason = $"Fallback calculation: Based on {group.TotalUsed} units used in the last month."
-                });
-            }
+                    suggestions.Add(new PartAiSuggestionDto
+                    {
+                        PartId = group.PartId,
+                        PartName = group.PartName,
+                        CurrentUsageTrend = usageTrend,
+                        SuggestedMinStock = suggestedMinStock,
+                        Reason = $"Fallback calculation: Based on {group.TotalUsed} units used in the last month."
+                    });
+                }
 
-            _logger.LogInformation("Generated {Count} fallback part suggestions for center {CenterId}.", suggestions.Count, centerId);
-            return suggestions;
+                _logger.LogInformation("Generated {Count} fallback part suggestions for center {CenterId}.", suggestions.Count, centerId);
+                return suggestions;
+            });
         }
 
 
