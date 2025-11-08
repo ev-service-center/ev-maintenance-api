@@ -27,7 +27,6 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 var history = new MaintenanceHistory
                 {
                     VehicleId = dto.VehicleId,
-                    AppointmentId = dto.AppointmentId,
                     MaintenanceDate = dto.MaintenanceDate,
                     Description = dto.Description,
                     Notes = dto.Notes,
@@ -40,7 +39,6 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 {
                     HistoryId = createdHistory.HistoryId,
                     VehicleId = createdHistory.VehicleId,
-                    AppointmentId = createdHistory.AppointmentId,
                     MaintenanceDate = createdHistory.MaintenanceDate,
                     Description = createdHistory.Description,
                     Notes = createdHistory.Notes,
@@ -72,7 +70,6 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 {
                     HistoryId = history.HistoryId,
                     VehicleId = history.VehicleId,
-                    AppointmentId = history.AppointmentId,
                     MaintenanceDate = history.MaintenanceDate,
                     Description = history.Description,
                     Notes = history.Notes,
@@ -102,7 +99,6 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 {
                     HistoryId = h.HistoryId,
                     VehicleId = h.VehicleId,
-                    AppointmentId = h.AppointmentId,
                     MaintenanceDate = h.MaintenanceDate,
                     Description = h.Description,
                     Notes = h.Notes,
@@ -132,7 +128,6 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 {
                     HistoryId = h.HistoryId,
                     VehicleId = h.VehicleId,
-                    AppointmentId = h.AppointmentId,
                     MaintenanceDate = h.MaintenanceDate,
                     Description = h.Description,
                     Notes = h.Notes,
@@ -163,7 +158,6 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 {
                     HistoryId = dto.HistoryId,
                     VehicleId = dto.VehicleId,
-                    AppointmentId = dto.AppointmentId,
                     MaintenanceDate = dto.MaintenanceDate,
                     Description = dto.Description,
                     Notes = dto.Notes,
@@ -176,7 +170,6 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 {
                     HistoryId = updatedHistory.HistoryId,
                     VehicleId = updatedHistory.VehicleId,
-                    AppointmentId = updatedHistory.AppointmentId,
                     MaintenanceDate = updatedHistory.MaintenanceDate,
                     Description = updatedHistory.Description,
                     Notes = updatedHistory.Notes,
