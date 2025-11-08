@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using EVServiceCenterMaintenanceAPI.Attributes;
 using EVServiceCenterMaintenanceAPI.Enums;
 
 namespace EVServiceCenterMaintenanceAPI.DTO
@@ -26,6 +27,8 @@ namespace EVServiceCenterMaintenanceAPI.DTO
                 [Required, StringLength(100)] public string Model { get; set; } = null!;
                 [Required, StringLength(50), RegularExpression(@"^[A-HJ-NPR-Z0-9]{17}$", ErrorMessage = "VIN must be 17 characters.")]
                 public string VIN { get; set; } = null!;
+                [Range(1886, int.MaxValue, ErrorMessage = "Manufacture year must be a positive number and not less than 1886.")]
+                [MaxCurrentYear]
                 public int? ManufactureYear { get; set; }
                 [Range(0, (double)decimal.MaxValue, ErrorMessage = "CurrentMileage must be non-negative.")] public decimal CurrentMileage { get; set; }
                 [StringLength(50)] public string? Color { get; set; }
@@ -37,6 +40,8 @@ namespace EVServiceCenterMaintenanceAPI.DTO
                 [StringLength(100)] public string? Model { get; set; }
                 [StringLength(50), RegularExpression(@"^[A-HJ-NPR-Z0-9]{17}$", ErrorMessage = "VIN must be 17 characters.")]
                 public string? VIN { get; set; }
+                [Range(1886, int.MaxValue, ErrorMessage = "Manufacture year must be a positive number and not less than 1886.")]
+                [MaxCurrentYear]
                 public int? ManufactureYear { get; set; }
                 [Range(0, (double)decimal.MaxValue, ErrorMessage = "CurrentMileage must be non-negative.")]
                 public decimal? CurrentMileage { get; set; }
