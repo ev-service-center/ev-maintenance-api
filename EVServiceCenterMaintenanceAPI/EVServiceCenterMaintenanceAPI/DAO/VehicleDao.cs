@@ -1,7 +1,8 @@
-﻿using EVServiceCenterMaintenanceAPI.Controllers;
+using EVServiceCenterMaintenanceAPI.Controllers;
 using EVServiceCenterMaintenanceAPI.Models;
 using Microsoft.EntityFrameworkCore;
 using EVServiceCenterMaintenanceAPI.Params;
+using EVServiceCenterMaintenanceAPI.Enums;
 
 namespace EVServiceCenterMaintenanceAPI.DAO
 {
@@ -14,6 +15,28 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             _context = context;
         }
 
+        public async Task<bool> IsVinExistsInActiveVehiclesAsync(string vin, int? excludeVehicleId = null)
+        {
+            var query = _context.Vehicles
+                .Where(v => v.Vin == vin && v.Status == VehicleStatus.Active.ToString());
+
+            if (excludeVehicleId.HasValue)
+                query = query.Where(v => v.VehicleId != excludeVehicleId.Value);
+
+            return await query.AnyAsync();
+        }
+
+        public async Task<bool> IsPlateExistsInActiveVehiclesAsync(string plate, int? excludeVehicleId = null)
+        {
+            var query = _context.Vehicles
+                .Where(v => v.Plate == plate && v.Status == VehicleStatus.Active.ToString());
+
+            if (excludeVehicleId.HasValue)
+                query = query.Where(v => v.VehicleId != excludeVehicleId.Value);
+
+            return await query.AnyAsync();
+        }
+
         public async Task<Vehicle> CreateVehicleAsync(Vehicle vehicle)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
@@ -21,6 +44,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             {
                 vehicle.CreatedAt = DateTime.UtcNow;
                 vehicle.UpdatedAt = DateTime.UtcNow;
+                vehicle.Status = VehicleStatus.Active.ToString();
                 _context.Vehicles.Add(vehicle);
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
@@ -42,8 +66,9 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
         public async Task<List<Vehicle>> GetVehiclesByCustomerIdAsync(int customerId)
         {
+            // Customer chỉ xem vehicles Active của mình
             return await _context.Vehicles
-                .Where(v => v.CustomerId == customerId)
+                .Where(v => v.CustomerId == customerId && v.Status == VehicleStatus.Active.ToString())
                 .Include(v => v.MaintenanceHistories)
                 .ToListAsync();
         }
@@ -57,10 +82,23 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             }
 
             var query = _context.Vehicles.Include(v => v.MaintenanceHistories).AsQueryable();
+
             if (!string.IsNullOrEmpty(queryParams.Search))
                 query = query.Where(v => v.Model.Contains(queryParams.Search) || v.Vin.Contains(queryParams.Search) || v.Plate.Contains(queryParams.Search));
             if (queryParams.CustomerId.HasValue)
                 query = query.Where(v => v.CustomerId == queryParams.CustomerId.Value);
+
+            // Filter by Status: Nếu có chọn Status thì dùng Status đó, nếu không thì ẩn Inactive
+            if (queryParams.StatusVehicle.HasValue)
+            {
+                query = query.Where(v => v.Status == queryParams.StatusVehicle.ToString());
+            }
+            else
+            {
+                // Mặc định: ẩn Inactive
+                query = query.Where(v => v.Status != VehicleStatus.Inactive.ToString());
+            }
+
             if (queryParams.FromDate.HasValue)
                 query = query.Where(v => v.CreatedAt >= queryParams.FromDate.Value);
             if (queryParams.ToDate.HasValue)
@@ -103,22 +141,9 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                var existingVehicle = await _context.Vehicles.FirstOrDefaultAsync(v => v.VehicleId == vehicle.VehicleId);
-                if (existingVehicle == null)
-                    throw new Exception($"Vehicle with ID {vehicle.VehicleId} not found.");
-
-                existingVehicle.Model = vehicle.Model;
-                existingVehicle.Vin = vehicle.Vin;
-                existingVehicle.ManufactureYear = vehicle.ManufactureYear;
-                existingVehicle.CurrentMileage = vehicle.CurrentMileage;
-                existingVehicle.Color = vehicle.Color;
-                existingVehicle.Plate = vehicle.Plate;
-                existingVehicle.LastMaintenanceDate = vehicle.LastMaintenanceDate;
-                existingVehicle.UpdatedAt = DateTime.UtcNow;
-
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
-                return existingVehicle;
+                return vehicle;
             }
             catch (Exception ex)
             {
@@ -136,7 +161,9 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 if (vehicle == null)
                     return false;
 
-                _context.Vehicles.Remove(vehicle);
+                // Soft delete: Set Status = Inactive
+                vehicle.Status = VehicleStatus.Inactive.ToString();
+                vehicle.UpdatedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
                 return true;

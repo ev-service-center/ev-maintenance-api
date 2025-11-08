@@ -85,21 +85,11 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
         public async Task<User> UpdateUserAsync(User user, string? newPassword = null)
         {
-            var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.UserId == user.UserId);
-            if (existingUser == null)
-                throw new Exception($"User with ID {user.UserId} not found.");
-
-            existingUser.FullName = user.FullName;
-            existingUser.Email = user.Email;
-            existingUser.Phone = user.Phone;
-            existingUser.Status = user.Status;
-            existingUser.Avatar = user.Avatar;
-            existingUser.UpdatedAt = DateTime.UtcNow;
             if (!string.IsNullOrEmpty(newPassword))
-                existingUser.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+                user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
 
             await _context.SaveChangesAsync();
-            return existingUser;
+            return user;
         }
 
         public async Task<User> UpdatePasswordAsync(int userId, string oldPassword, string newPassword)

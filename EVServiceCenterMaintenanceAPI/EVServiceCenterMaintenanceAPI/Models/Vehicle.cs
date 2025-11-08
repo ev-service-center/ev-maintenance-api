@@ -27,6 +27,8 @@ public partial class Vehicle
 
     public DateTime UpdatedAt { get; set; }
 
+    public string Status { get; set; } = null!;
+
     public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
 
     public virtual User Customer { get; set; } = null!;

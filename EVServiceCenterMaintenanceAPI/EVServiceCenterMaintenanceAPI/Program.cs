@@ -6,6 +6,7 @@ using EVServiceCenterMaintenanceAPI.Models;
 using EVServiceCenterMaintenanceAPI.Services;
 using EVServiceCenterMaintenanceAPI.Utils;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -80,7 +81,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("Frontend", policy =>
     {
-        policy.WithOrigins("http://localhost:5173")
+        policy.WithOrigins("http://localhost:3000")
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
@@ -104,7 +105,16 @@ builder.Services.AddScoped<MaintenanceHistoryDao>();
 builder.Services.AddScoped<AppointmentSlotGeneratorService>();
 builder.Services.AddHostedService<SlotGenerationBackgroundService>();
 builder.Services.AddScoped<AppointmentSlotDao>();
-
+builder.Services.AddScoped<AppointmentDao>();
+builder.Services.AddScoped<WorkOrderDao>();
+builder.Services.AddScoped<PayOSService>();
+builder.Services.Configure<PayOSSettings>(builder.Configuration.GetSection("PayOS"));
+builder.Services.Configure<ForwardedHeadersOptions>(option =>
+{
+    option.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    option.KnownProxies.Add(IPAddress.Parse("172.18.0.4"));
+    option.ForwardLimit = 1;
+});
 
 
 builder.Services.AddScoped<ITokenBlacklistService, TokenBlacklistService>();
@@ -212,6 +222,7 @@ if (!Directory.Exists(webRootPath))
     Directory.CreateDirectory(webRootPath);
 }
 
+app.UseForwardedHeaders();
 app.UseStaticFiles();
 
 app.UseCors("Frontend");

@@ -119,6 +119,25 @@ namespace EVServiceCenterMaintenanceAPI.Services
             }
         }
 
+        public async Task<bool> SendChangeInfoAppointmentEmailAsync(AppointmentResponseDto app, string? toEmail)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(toEmail))
+                {
+                    return false;
+                }
+
+                var message = EmailTemplate.GenerateMaintenanceStatusEmailTemplate(app);
+                await SendEmailAsync(toEmail, "Thông báo trạng thái bảo dưỡng xe - 3DO Corp", message, true);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
         private async Task SendEmailViaSendGridApiAsync(string toEmail, string subject, string body, bool isBodyHtml)
         {
             var apiKey = _emailSetting.Password; // SendGrid API Key
@@ -153,7 +172,7 @@ namespace EVServiceCenterMaintenanceAPI.Services
             Console.WriteLine($"Email sent successfully via SendGrid API to {toEmail}");
         }
 
-        private string StripHtml(string html)
+        private static string StripHtml(string html)
         {
             if (string.IsNullOrEmpty(html)) return string.Empty;
             var plainText = HtmlRegex().Replace(html, string.Empty);

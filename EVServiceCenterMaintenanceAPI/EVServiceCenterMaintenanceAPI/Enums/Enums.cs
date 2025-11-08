@@ -64,6 +64,29 @@
         Deleted
     }
 
+    public enum AppointmentStatus
+    {
+        Pending,
+        Confirmed,
+        InProgress,
+        Completed,
+        Cancelled
+    }
+
+    public enum WorkOrderStatus
+    {
+        Pending,
+        InProgress,
+        Completed,
+        Cancelled
+    }
+
+    public enum VehicleStatus
+    {
+        Active,
+        Inactive
+    }
+
     public enum SlotDuration
     {
         ThirtyMinutes = 30,
@@ -107,6 +130,37 @@
             // - Slot bắt đầu trước khi lunch break kết thúc VÀ
             // - Slot kết thúc sau khi lunch break bắt đầu
             return slotStart < LunchBreakEnd && slotEnd > LunchBreakStart;
+        }
+    }
+    public static class HostBookingUrl
+    {
+        private const string Local = "http://localhost:3000/booking/callback/";
+        private const string Production = "https://demo.com/booking/callback/";
+
+        public static string GetBaseUrl(HostEnvironment env)
+        {
+            return env switch
+            {
+                HostEnvironment.Local => Local,
+                HostEnvironment.Production => Production,
+                _ => throw new ArgumentOutOfRangeException(nameof(env), env, null)
+            };
+        }
+
+        public static string GetCancelUrl(HostEnvironment env, int bookingId)
+        {
+            return $"{GetBaseUrl(env)}cancel?bookingId={bookingId}";
+        }
+
+        public static string GetSuccessUrl(HostEnvironment env, int bookingId)
+        {
+            return $"{GetBaseUrl(env)}success?bookingId={bookingId}";
+        }
+
+        public enum HostEnvironment
+        {
+            Local,
+            Production
         }
     }
 }

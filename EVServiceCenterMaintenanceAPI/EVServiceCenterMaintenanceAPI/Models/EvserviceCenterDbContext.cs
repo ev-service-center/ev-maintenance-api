@@ -542,6 +542,9 @@ public partial class EvserviceCenterDbContext : DbContext
             entity.Property(e => e.LastMaintenanceDate).HasColumnType("datetime");
             entity.Property(e => e.Model).HasMaxLength(100);
             entity.Property(e => e.Plate).HasMaxLength(20);
+            entity.Property(e => e.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue("Active");
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");

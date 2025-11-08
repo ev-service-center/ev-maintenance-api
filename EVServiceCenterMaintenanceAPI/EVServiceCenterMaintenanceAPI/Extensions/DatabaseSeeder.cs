@@ -20,7 +20,7 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
                 var adminUser = new User
                 {
                     Username = "admin",
-                    Email = "admin@evservicecenter.com",
+                    Email = "admin@evservicecenter.me",
                     FullName = "System Administrator",
                     Phone = "0000000000",
                     Role = UserRole.Admin.ToString(),
@@ -58,7 +58,7 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
                     CenterName = "Trung Tâm Dịch Vụ Xe Điện TP.HCM - Quận 1",
                     Address = "Số 456 Đường Nguyễn Huệ, Quận 1, TP.HCM",
                     Phone = "028-9876-5432",
-                    Email = "hcmc.q1@evservicecenter.com",
+                    Email = "hcmc.q1@evservicecenter.me",
                     Status = ServiceCenterStatus.Open.ToString(),
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
@@ -67,7 +67,7 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
                     CenterName = "Trung Tâm Dịch Vụ Xe Điện TP.HCM - Quận 3",
                     Address = "Số 123 Đường Lê Văn Sỹ, Quận 3, TP.HCM",
                     Phone = "028-1234-5678",
-                    Email = "hcmc.q3@evservicecenter.com",
+                    Email = "hcmc.q3@evservicecenter.me",
                     Status = ServiceCenterStatus.Open.ToString(),
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
@@ -76,7 +76,7 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
                     CenterName = "Trung Tâm Dịch Vụ Xe Điện TP.HCM - Quận 7",
                     Address = "Số 789 Đường Nguyễn Thị Thập, Quận 7, TP.HCM",
                     Phone = "028-5678-9012",
-                    Email = "hcmc.q7@evservicecenter.com",
+                    Email = "hcmc.q7@evservicecenter.me",
                     Status = ServiceCenterStatus.Open.ToString(),
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
@@ -85,7 +85,7 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
                     CenterName = "Trung Tâm Dịch Vụ Xe Điện TP.HCM - Quận 10",
                     Address = "Số 321 Đường 3 Tháng 2, Quận 10, TP.HCM",
                     Phone = "028-3456-7890",
-                    Email = "hcmc.q10@evservicecenter.com",
+                    Email = "hcmc.q10@evservicecenter.me",
                     Status = ServiceCenterStatus.Open.ToString(),
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
@@ -94,7 +94,7 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
                     CenterName = "Trung Tâm Dịch Vụ Xe Điện TP.HCM - Quận Bình Thạnh",
                     Address = "Số 654 Đường Xô Viết Nghệ Tĩnh, Quận Bình Thạnh, TP.HCM",
                     Phone = "028-9012-3456",
-                    Email = "hcmc.binhthanh@evservicecenter.com",
+                    Email = "hcmc.binhthanh@evservicecenter.me",
                     Status = ServiceCenterStatus.Open.ToString(),
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
@@ -567,7 +567,7 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
                     var staffUser = new User
                     {
                         Username = $"staff_{center.CenterId}_{i}",
-                        Email = $"staff{i}@center{center.CenterId}.evservicecenter.com",
+                        Email = $"staff{i}@center{center.CenterId}.evservicecenter.me",
                         FullName = $"Nhân Viên {i} - {center.CenterName}",
                         Phone = $"028{center.CenterId:D2}{i:D2}0000",
                         Role = UserRole.Staff.ToString(),
@@ -584,7 +584,7 @@ namespace EVServiceCenterMaintenanceAPI.Extensions
                     var techUser = new User
                     {
                         Username = $"technician_{center.CenterId}_{i}",
-                        Email = $"technician{i}@center{center.CenterId}.evservicecenter.com",
+                        Email = $"technician{i}@center{center.CenterId}.evservicecenter.me",
                         FullName = $"Kỹ Thuật Viên {i} - {center.CenterName}",
                         Phone = $"028{center.CenterId:D2}{i:D2}1111",
                         Role = UserRole.Technician.ToString(),

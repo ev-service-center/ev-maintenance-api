@@ -8,7 +8,6 @@ using EVServiceCenterMaintenanceAPI.Enums;
 using EVServiceCenterMaintenanceAPI.Models;
 using EVServiceCenterMaintenanceAPI.Services;
 using EVServiceCenterMaintenanceAPI.Utils;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 
@@ -85,8 +84,8 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 var createdUser = await _userDao.RegisterUserAsync(user, registerDto.Password, authToken);
 
                 var appUrl = _configuration["AppUrl"];
-                var url = string.IsNullOrEmpty(appUrl) ? "https://localhost:3000" : appUrl;
-                var activationLink = $"{url}/account/activate?userId={createdUser.UserId}&token={Uri.EscapeDataString(authToken.TokenValue)}";
+                var url = string.IsNullOrEmpty(appUrl) ? "http://localhost:3001" : appUrl;
+                var activationLink = $"{url}/auth/activate?userId={createdUser.UserId}&token={Uri.EscapeDataString(authToken.TokenValue)}";
 
                 // Send email backgroud
                 TaskHelper.FireAndForget(user.FullName, user.Email, activationLink, authToken.ExpiresAt,
