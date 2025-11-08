@@ -22,7 +22,7 @@ namespace EVServiceCenterMaintenanceAPI.DTO
     {
         [Required, Range(1, int.MaxValue, ErrorMessage = "CustomerId must be positive.")] public int CustomerId { get; set; }
         [Required, StringLength(100)]public string Model { get; set; } = null!;
-        [Required, StringLength(50)] public string VIN { get; set; } = null!;
+        [Required, StringLength(50), RegularExpression(@"^[A-HJ-NPR-Z0-9]{17}$", ErrorMessage = "VIN must be 17 characters.")] public string VIN { get; set; } = null!;
         public int? ManufactureYear { get; set; }
         [Range(0, (double)decimal.MaxValue, ErrorMessage = "CurrentMileage must be non-negative.")] public decimal CurrentMileage { get; set; }
         [StringLength(50)] public string? Color { get; set; }
@@ -34,7 +34,7 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         [Required] public int VehicleId { get; set; }
         [Required, Range(1, int.MaxValue, ErrorMessage = "CustomerId must be positive.")] public int CustomerId { get; set; }
         [Required, StringLength(100)] public string Model { get; set; } = null!;
-        [Required, StringLength(50)] public string VIN { get; set; } = null!;
+        [Required, StringLength(50), RegularExpression(@"^[A-HJ-NPR-Z0-9]{17}$", ErrorMessage = "VIN must be 17 characters.")] public string VIN { get; set; } = null!;
         public int? ManufactureYear { get; set; }
         [Range(0, (double)decimal.MaxValue, ErrorMessage = "CurrentMileage must be non-negative.")] public decimal CurrentMileage { get; set; }
         [StringLength(50)] public string? Color { get; set; }
