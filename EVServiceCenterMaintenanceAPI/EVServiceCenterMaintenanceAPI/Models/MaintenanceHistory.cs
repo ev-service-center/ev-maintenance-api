@@ -12,8 +12,6 @@ public partial class MaintenanceHistory
     public int? WorkOrderId { get; set; }
 
     public int? ServiceId { get; set; }
-    public int? AppointmentId { get; set; }
-
     public DateTime MaintenanceDate { get; set; }
 
     public string? Description { get; set; }
