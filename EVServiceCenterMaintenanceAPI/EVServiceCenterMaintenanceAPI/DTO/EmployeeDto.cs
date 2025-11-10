@@ -13,6 +13,7 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
         public EmployeeUserInfoDto? User { get; set; }
+        public ServiceCenterResponseDto? Center { get; set; }
     }
 
     public class EmployeeUserInfoDto
@@ -42,6 +43,21 @@ namespace EVServiceCenterMaintenanceAPI.DTO
 
         [Range(0, 100, ErrorMessage = "PerformanceScore must be between 0 and 100.")]
         public decimal PerformanceScore { get; set; }
+
+        [StringLength(255)]
+        public string? Certificate { get; set; }
+    }
+
+    public class EmployeeUpdateRequestDto
+    {
+        [Range(1, int.MaxValue, ErrorMessage = "CenterId must be a positive integer.")]
+        public int? CenterId { get; set; }
+
+        [StringLength(50)]
+        public string? Shift { get; set; }
+
+        [Range(0, 100, ErrorMessage = "PerformanceScore must be between 0 and 100.")]
+        public decimal? PerformanceScore { get; set; }
 
         [StringLength(255)]
         public string? Certificate { get; set; }

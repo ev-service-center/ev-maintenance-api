@@ -88,5 +88,28 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
             return (employees, total);
         }
+
+        public async Task<Employee> UpdateEmployeeAsync(Employee employee)
+        {
+            // Entity is already tracked and modified in controller
+            // SaveChangesAsync() is already atomic - no transaction needed for single operation
+            await _context.SaveChangesAsync();
+
+            // Reload with includes to return full data
+            return await _context.Employees
+                .Include(e => e.EmployeeNavigation)
+                .Include(e => e.Center)
+                .FirstOrDefaultAsync(e => e.EmployeeId == employee.EmployeeId) ?? employee;
+        }
+
+        public async Task<bool> DeleteEmployeeAsync(int employeeId)
+        {
+            var employee = await _context.Employees.FindAsync(employeeId);
+            if (employee == null)
+                return false;
+            _context.Employees.Remove(employee);
+            await _context.SaveChangesAsync();
+            return true;
+        }
     }
 }

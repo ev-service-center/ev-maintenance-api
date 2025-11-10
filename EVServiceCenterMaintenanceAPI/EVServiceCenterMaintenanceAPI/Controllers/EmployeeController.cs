@@ -157,6 +157,98 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             }
         }
 
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> UpdateEmployee(int id, [FromBody] EmployeeUpdateRequestDto dto)
+        {
+            try
+            {
+                if (dto == null)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Empty request (DTO null)."));
+                }
+
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState
+                        .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
+                    return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+                }
+
+                // Get existing employee
+                var existingEmployee = await _employeeDao.GetEmployeeByIdAsync(id);
+                if (existingEmployee == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "Employee not found."));
+
+                // Validate CenterId if provided
+                if (dto.CenterId.HasValue)
+                {
+                    var centerExists = await _centerDao.IsExistServiceCenterAsync(dto.CenterId.Value);
+                    if (!centerExists)
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", $"Service Center with ID {dto.CenterId.Value} not found."));
+                }
+
+                // Validate PerformanceScore range if provided
+                if (dto.PerformanceScore.HasValue && (dto.PerformanceScore.Value < 0 || dto.PerformanceScore.Value > 100))
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "PerformanceScore must be between 0 and 100."));
+                }
+
+                // Only update fields that are provided (partial update support)
+                if (dto.CenterId.HasValue)
+                    existingEmployee.CenterId = dto.CenterId.Value;
+
+                if (dto.Shift != null)
+                    existingEmployee.Shift = dto.Shift;
+
+                if (dto.PerformanceScore.HasValue)
+                    existingEmployee.PerformanceScore = dto.PerformanceScore.Value;
+
+                if (dto.Certificate != null)
+                    existingEmployee.Certificate = dto.Certificate;
+
+                existingEmployee.UpdatedAt = DateTime.UtcNow;
+
+                var updatedEmployee = await _employeeDao.UpdateEmployeeAsync(existingEmployee);
+
+                // Map to DTO (updatedEmployee already includes User and Center data)
+                var updatedDto = MapEmployeeToDto(updatedEmployee);
+
+                return Ok(new ApiResponse<EmployeeResponseDto>(200, "Success", "Employee updated successfully.", data: updatedDto));
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new ApiResponse<object>(404, "NotFound", ex.Message));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> DeleteEmployee(int id)
+        {
+            try
+            {
+                var success = await _employeeDao.DeleteEmployeeAsync(id);
+                if (!success)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "Employee not found."));
+
+                return Ok(new ApiResponse<object>(200, "Success", "Employee deleted successfully."));
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new ApiResponse<object>(404, "NotFound", ex.Message));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to delete employee: {ex.Message}"));
+            }
+        }
+
         private EmployeeResponseDto MapEmployeeToDto(Employee employee)
         {
             var dto = new EmployeeResponseDto
@@ -185,6 +277,22 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     Avatar = employee.EmployeeNavigation.Avatar != null
                         ? HttpContext.ToAbsoluteUrl(employee.EmployeeNavigation.Avatar)
                         : HttpContext.ToAbsoluteUrl(DefaultAvatar.Local)
+                };
+            }
+
+            // Map ServiceCenter info if available
+            if (employee.Center != null)
+            {
+                dto.Center = new ServiceCenterResponseDto
+                {
+                    CenterId = employee.Center.CenterId,
+                    CenterName = employee.Center.CenterName,
+                    Address = employee.Center.Address,
+                    Phone = employee.Center.Phone,
+                    Email = employee.Center.Email,
+                    Status = Enum.Parse<ServiceCenterStatus>(employee.Center.Status),
+                    CreatedAt = employee.Center.CreatedAt,
+                    UpdatedAt = employee.Center.UpdatedAt
                 };
             }
 
