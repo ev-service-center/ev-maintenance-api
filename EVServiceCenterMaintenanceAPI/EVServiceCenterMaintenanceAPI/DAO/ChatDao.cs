@@ -108,5 +108,26 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 throw new Exception($"Failed to update chat with ID {chat.ChatId}.", ex);
             }
         }
+
+        public async Task<bool> DeleteChatAsync(int chatId)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var chat = await _context.Chats.FindAsync(chatId);
+                if (chat == null)
+                    return false;
+
+                _context.Chats.Remove(chat);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception($"Failed to delete chat with ID {chatId}.", ex);
+            }
+        }
     }
 }
