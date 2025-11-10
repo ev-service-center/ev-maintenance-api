@@ -131,9 +131,37 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 
                     _context.Payments.Add(payment);
 
-                    // Update Appointment status to Confirmed
+                    // Update Appointment status to Confirmed and mark slot as unavailable
                     if (workOrder.Appointment != null)
                     {
+                        // Check if slot is still available (prevent late payment for already-booked slots)
+                        if (workOrder.Appointment.Slot != null)
+                        {
+                            if (!workOrder.Appointment.Slot.IsAvailable)
+                            {
+                                _logger.LogWarning("Slot {SlotId} is no longer available for Appointment {AppointmentId}. Payment received but appointment cannot be confirmed.",
+                                    workOrder.Appointment.Slot.SlotId, workOrder.Appointment.AppointmentId);
+
+                                // Mark appointment as cancelled due to slot unavailable
+                                workOrder.Appointment.Status = AppointmentStatus.Cancelled.ToString();
+
+                                await _context.SaveChangesAsync();
+
+                                // TODO: Notify customer about slot unavailable and manual refund
+                                return Ok(new
+                                {
+                                    message = "Payment received but slot is no longer available. Please contact support for refund.",
+                                    appointmentId = workOrder.Appointment.AppointmentId,
+                                    status = "SlotUnavailable",
+                                    requiresRefund = true
+                                });
+                            }
+
+                            // Mark slot as unavailable after payment success
+                            workOrder.Appointment.Slot.IsAvailable = false;
+                            _logger.LogInformation("Marked Slot {SlotId} as unavailable after payment confirmation", workOrder.Appointment.Slot.SlotId);
+                        }
+
                         workOrder.Appointment.Status = AppointmentStatus.Confirmed.ToString();
                         _logger.LogInformation("Updated Appointment {AppointmentId} status to Confirmed", workOrder.Appointment.AppointmentId);
                     }
@@ -440,6 +468,8 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     .Include(i => i.WorkOrder)
                         .ThenInclude(w => w.Customer)
                     .Include(i => i.WorkOrder)
+                        .ThenInclude(w => w.Vehicle)
+                    .Include(i => i.WorkOrder)
                         .ThenInclude(w => w.AppointmentServices)
                             .ThenInclude(aps => aps.Service)
                     .Include(i => i.WorkOrder)
@@ -481,9 +511,75 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 decimal totalPaid = invoice.Payments.Sum(p => p.Amount);
                 decimal remainingAmount = invoice.TotalAmount - totalPaid;
 
+                // If remaining amount is 0 or negative (due to rounding), mark invoice as paid and send email
                 if (remainingAmount <= 0)
                 {
-                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Invoice has no remaining amount to pay."));
+                    // Update invoice status to Paid if not already
+                    if (invoice.Status != InvoiceStatus.Paid.ToString())
+                    {
+                        invoice.Status = InvoiceStatus.Paid.ToString();
+                        invoice.UpdatedAt = DateTime.UtcNow;
+                        await _context.SaveChangesAsync();
+                        _logger.LogInformation("Invoice {InvoiceId} marked as Paid (remainingAmount: {RemainingAmount})",
+                            invoice.InvoiceId, remainingAmount);
+
+                        // Send final payment confirmation email (same logic as webhook)
+                        if (!string.IsNullOrEmpty(invoice.WorkOrder?.Customer?.Email))
+                        {
+                            // Get vehicle info
+                            string vehicleInfo = invoice.WorkOrder.Vehicle != null
+                                ? $"{invoice.WorkOrder.Vehicle.Model ?? "N/A"} ({invoice.WorkOrder.Vehicle.Plate ?? "N/A"})"
+                                : "N/A";
+
+                            // Format payment date - Use current time
+                            string paymentDateFormatted = DateTime.UtcNow.ConvertToVietnamTime().ToString("dd/MM/yyyy HH:mm:ss");
+
+                            // Get customer name and email
+                            string customerName = invoice.WorkOrder.Customer?.FullName ?? "Khách hàng";
+                            string customerEmail = invoice.WorkOrder.Customer!.Email;
+
+                            // Get invoice status
+                            string invoiceStatus = invoice.Status;
+
+                            int invoiceIdCopy = invoice.InvoiceId;
+                            int workOrderIdCopy = invoice.WorkOrderId;
+                            decimal amountCopy = 0; // No additional payment needed
+                            decimal totalAmountCopy = invoice.TotalAmount;
+                            decimal totalPaidCopy = totalPaid;
+                            string transactionId = "N/A"; // No transaction for zero amount
+                            string orderCodeStr = "N/A"; // No order code for zero amount
+
+                            TaskHelper.FireAndForget(async () =>
+                            {
+                                try
+                                {
+                                    await _emailService.SendFinalPaymentConfirmationEmailAsync(
+                                        customerName,
+                                        customerEmail,
+                                        invoiceIdCopy,
+                                        workOrderIdCopy,
+                                        amountCopy,
+                                        totalAmountCopy,
+                                        totalPaidCopy,
+                                        vehicleInfo,
+                                        paymentDateFormatted,
+                                        transactionId,
+                                        orderCodeStr,
+                                        invoiceStatus
+                                    );
+                                    _logger.LogInformation("Final payment confirmation email sent to {Email} for Invoice {InvoiceId}",
+                                        customerEmail, invoiceIdCopy);
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogError(ex, "Failed to send final confirmation email for Invoice {InvoiceId}", invoiceIdCopy);
+                                }
+                            });
+                        }
+                    }
+
+                    return Ok(new ApiResponse<object>(200, "Success",
+                        "Invoice is already fully paid. No payment link needed. Invoice status updated and confirmation email sent."));
                 }
 
                 // Determine payment type and what is being paid
