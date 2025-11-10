@@ -1,6 +1,7 @@
 ﻿using EVServiceCenterMaintenanceAPI.DAO;
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -72,6 +73,34 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 };
 
                 return Ok(new ApiResponse<ChatResponseDto>(200, "Success", "Chat retrieved successfully.", data: dto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpGet]
+        [Authorize(Roles = "Staff,Admin")]
+        public async Task<IActionResult> GetAllChats([FromQuery] ChatQueryParams queryParams)
+        {
+            try
+            {
+                var (chats, total) = await _chatDao.GetAllChatsAsync(queryParams);
+
+                var dtos = chats.Select(c => new ChatResponseDto
+                {
+                    ChatId = c.ChatId,
+                    ConversationId = c.ConversationId,
+                    SenderId = c.SenderId,
+                    Message = c.Message,
+                    SentDate = c.SentDate,
+                    CreatedAt = c.CreatedAt,
+                    UpdatedAt = c.UpdatedAt
+                }).ToList();
+
+                var responseData = new { chats = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
+                return Ok(new ApiResponse<object>(200, "Success", "Chats retrieved successfully.", data: responseData));
             }
             catch (Exception ex)
             {

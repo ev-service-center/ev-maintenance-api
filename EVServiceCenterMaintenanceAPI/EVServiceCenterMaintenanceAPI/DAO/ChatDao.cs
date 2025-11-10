@@ -1,4 +1,5 @@
 ﻿using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.EntityFrameworkCore;
 
 namespace EVServiceCenterMaintenanceAPI.DAO
@@ -36,5 +37,46 @@ namespace EVServiceCenterMaintenanceAPI.DAO
         {
             return await _context.Chats.FirstOrDefaultAsync(c => c.ChatId == chatId);
         }
+
+        public async Task<(List<Chat> Chats, int Total)> GetAllChatsAsync(ChatQueryParams queryParams)
+        {
+            var validation = queryParams.Validate();
+            if (!validation.IsValid)
+            {
+                throw new ArgumentException(validation.ErrorMessage);
+            }
+
+            var query = _context.Chats.AsQueryable();
+            if (queryParams.ConversationId.HasValue)
+                query = query.Where(c => c.ConversationId == queryParams.ConversationId.Value);
+            if (queryParams.FromDate.HasValue)
+                query = query.Where(c => c.SentDate >= queryParams.FromDate.Value);
+            if (queryParams.ToDate.HasValue)
+                query = query.Where(c => c.SentDate <= queryParams.ToDate.Value);
+
+            if (!string.IsNullOrEmpty(queryParams.SortBy))
+            {
+                bool isAscending = queryParams.SortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase);
+                switch (queryParams.SortBy.ToLower())
+                {
+                    case "sentdate":
+                        query = isAscending ? query.OrderBy(c => c.SentDate) : query.OrderByDescending(c => c.SentDate);
+                        break;
+                    default:
+                        query = isAscending ? query.OrderBy(c => c.ChatId) : query.OrderByDescending(c => c.ChatId);
+                        break;
+                }
+            }
+
+            var total = await query.CountAsync();
+            var chats = await query
+                .OrderByDescending(c => c.SentDate)
+                .Skip((queryParams.Page - 1) * queryParams.PageSize)
+                .Take(queryParams.PageSize)
+                .ToListAsync();
+
+            return (chats, total);
+        }
+
     }
 }
