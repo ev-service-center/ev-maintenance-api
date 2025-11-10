@@ -87,6 +87,15 @@
         Inactive
     }
 
+    public enum InvoiceStatus
+    {
+        Unpaid,
+        PartiallyPaid,
+        Paid,
+        Cancelled,
+        Overdue
+    }
+
     public enum SlotDuration
     {
         ThirtyMinutes = 30,
