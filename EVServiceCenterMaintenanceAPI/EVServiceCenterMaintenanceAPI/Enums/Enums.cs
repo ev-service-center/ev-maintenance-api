@@ -1,4 +1,4 @@
-﻿namespace EVServiceCenterMaintenanceAPI.Enums
+namespace EVServiceCenterMaintenanceAPI.Enums
 {
 
     public enum StringLength
@@ -85,6 +85,13 @@
     {
         Active,
         Inactive
+    }
+
+    public enum PaymentType
+    {
+        Deposit,
+        Final,
+        Full
     }
 
     public enum InvoiceStatus
