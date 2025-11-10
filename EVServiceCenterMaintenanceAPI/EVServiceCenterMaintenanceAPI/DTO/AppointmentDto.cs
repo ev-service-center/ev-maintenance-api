@@ -17,6 +17,9 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         public DateTime UpdatedAt { get; set; }
         public decimal? Amount { get; set; }
         public string? PaymentLink { get; set; }
+        public decimal? DepositAmount { get; set; }
+        public decimal? RemainingAmount { get; set; }
+
         public VehicleResponeDto? VehicleDetails { get; set; }
         public UserResponseDto? CustomerDetails { get; set; }
         public ServiceCenterResponseDto? CenterDetails { get; set; }
@@ -29,7 +32,6 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         [Required] public int VehicleId { get; set; }
         [Required] public int CenterId { get; set; }
         [Required] public int SlotId { get; set; }
-        [Required] public DateTime AppointmentDate { get; set; }
         public string? Notes { get; set; }
         public List<int> ServiceIds { get; set; } = new List<int>();
     }
@@ -39,7 +41,6 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         [Required] public int VehicleId { get; set; }
         [Required] public int CenterId { get; set; }
         [Required] public int SlotId { get; set; }
-        [Required] public DateTime AppointmentDate { get; set; }
         public string? Notes { get; set; }
         public string? PaymentMethod { get; set; }
         public List<int> ServiceIds { get; set; } = new List<int>();

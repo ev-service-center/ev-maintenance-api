@@ -1,5 +1,6 @@
 ﻿using System;
 using EVServiceCenterMaintenanceAPI.DTO;
+using EVServiceCenterMaintenanceAPI.Helpers;
 using EVServiceCenterMaintenanceAPI.Models;
 
 namespace EVServiceCenterMaintenanceAPI.Utils
@@ -8,9 +9,7 @@ namespace EVServiceCenterMaintenanceAPI.Utils
     {
         private static DateTime GetVietNamTime(DateTime utcTime)
         {
-            TimeZoneInfo timeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
-            DateTime vietnamTime = TimeZoneInfo.ConvertTimeFromUtc(utcTime, timeZoneInfo);
-            return vietnamTime;
+            return utcTime.ConvertToVietnamTime();
         }
         public static string GenerateActivationEmailTemplate(string userName, string activationLink, DateTime expiryDate)
         {
@@ -355,6 +354,278 @@ namespace EVServiceCenterMaintenanceAPI.Utils
             <div class='security-notice'>
                 <h3>Thông báo bảo mật</h3>
                 <p>Nếu bạn không thực hiện cuộc hẹn này, vui lòng liên hệ với đội ngũ hỗ trợ của chúng tôi tại <a href='mailto:support@evservicecenter.me'>support@evservicecenter.me</a>.</p>
+            </div>
+        </div>
+        <div class='footer'>
+            <div class='footer-brand'>EV Service Center</div>
+            <p>Tra Vinh, Viet Nam</p>
+            <p>Email: <a href='mailto:support@evservicecenter.me'>support@evservicecenter.me</a> | Điện thoại: 0338302160</p>
+            <p>© 2025 EV Service Center. Tất cả quyền được bảo lưu.</p>
+            </div>
+        </div>
+    </body>
+</html>";
+        }
+
+        public static string GenerateDepositPaymentConfirmationEmailTemplate(
+            string customerName,
+            int workOrderId,
+            decimal depositAmount,
+            string vehicleInfo,
+            string appointmentDate,
+            string paymentDate,
+            string transactionId,
+            string orderCode)
+        {
+            return @"
+<!DOCTYPE html>
+<html lang='vi'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Xác nhận thanh toán cọc - EV Service Center</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; background: #f4f7fa; padding: 20px; }
+        .email-container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1); overflow: hidden; }
+        .header { background: linear-gradient(135deg, #007bff, #00c4cc); padding: 30px; text-align: center; position: relative; }
+        .header img { width: 100px; height: auto; margin-bottom: 15px; }
+        .header h1 { color: #ffffff; font-size: 24px; font-weight: 600; margin-bottom: 10px; }
+        .header p { color: rgba(255, 255, 255, 0.9); font-size: 14px; }
+        .content { padding: 40px; text-align: center; }
+        .greeting { font-size: 18px; color: #1a2b49; margin-bottom: 20px; font-weight: 600; }
+        .message { font-size: 15px; color: #4a5b6c; margin-bottom: 30px; line-height: 1.7; }
+        .payment-success { background: #d4edda; border: 2px solid #28a745; border-radius: 8px; padding: 20px; margin: 20px 0; }
+        .payment-success-icon { font-size: 48px; color: #28a745; margin-bottom: 10px; }
+        .payment-success-text { font-size: 18px; font-weight: 600; color: #155724; margin-bottom: 10px; }
+        .payment-details { margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: left; }
+        .payment-details h3 { color: #1a2b49; font-size: 16px; margin-bottom: 15px; font-weight: 600; }
+        .payment-details-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e0e4e8; }
+        .payment-details-row:last-child { border-bottom: none; }
+        .payment-details-label { color: #6c757d; font-size: 14px; font-weight: 500; }
+        .payment-details-value { color: #1a2b49; font-size: 14px; font-weight: 600; }
+        .amount-highlight { font-size: 24px; color: #007bff; font-weight: 700; }
+        .appointment-info { margin: 20px 0; padding: 15px; background: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 8px; text-align: left; }
+        .appointment-info h3 { color: #1565c0; font-size: 14px; margin-bottom: 8px; font-weight: 600; }
+        .appointment-info p { color: #4a5b6c; font-size: 13px; margin-bottom: 5px; }
+        .next-steps { margin-top: 20px; padding: 15px; background: #fff8e1; border-left: 4px solid #ffca28; border-radius: 8px; text-align: left; }
+        .next-steps h3 { color: #e65100; font-size: 14px; margin-bottom: 8px; font-weight: 600; }
+        .next-steps p { color: #4a5b6c; font-size: 13px; }
+        .footer { background: #f8f9fa; padding: 30px; text-align: center; border-top: 1px solid #e0e4e8; }
+        .footer-brand { font-size: 18px; font-weight: 700; color: #007bff; margin-bottom: 10px; }
+        .footer p { color: #6c757d; font-size: 12px; margin-bottom: 8px; }
+        .footer a { color: #007bff; text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+        @media (max-width: 600px) {
+            .email-container { margin: 10px; border-radius: 8px; }
+            .header { padding: 20px; }
+            .content { padding: 20px; }
+            .header img { width: 80px; }
+            .header h1 { font-size: 20px; }
+            .payment-details-row { flex-direction: column; }
+            .payment-details-value { margin-top: 5px; }
+        }
+    </style>
+</head>
+<body>
+    <div class='email-container'>
+        <div class='header'>
+            <img src='https://res.cloudinary.com/dphys6egj/image/upload/v1759812317/Pngtree_hipster_bike_electric_logo_design_4847419_wvci4k.jpg' alt='Logo EV Service Center'>
+            <h1>Xác nhận thanh toán cọc</h1>
+            <p>Thanh toán của bạn đã được xác nhận</p>
+        </div>
+        <div class='content'>
+            <div class='greeting'>Xin chào, " + customerName + @"!</div>
+            <div class='message'>
+                Cảm ơn bạn đã thanh toán cọc cho dịch vụ bảo dưỡng. Chúng tôi đã nhận được thanh toán của bạn và cuộc hẹn đã được xác nhận.
+            </div>
+            <div class='payment-success'>
+                <div class='payment-success-icon'>✓</div>
+                <div class='payment-success-text'>Thanh toán thành công!</div>
+            </div>
+            <div class='payment-details'>
+                <h3>Chi tiết thanh toán</h3>
+                <div class='payment-details-row'>
+                    <span class='payment-details-label'>Số tiền đã thanh toán:</span>
+                    <span class='payment-details-value amount-highlight'>" + depositAmount.ToString("N0") + @" VNĐ</span>
+                </div>
+                <div class='payment-details-row'>
+                    <span class='payment-details-label'>Mã đơn hàng:</span>
+                    <span class='payment-details-value'>" + workOrderId.ToString("D6") + @"</span>
+                </div>
+                <div class='payment-details-row'>
+                    <span class='payment-details-label'>Mã giao dịch:</span>
+                    <span class='payment-details-value'>" + transactionId + @"</span>
+                </div>
+                <div class='payment-details-row'>
+                    <span class='payment-details-label'>Mã đơn hàng PayOS:</span>
+                    <span class='payment-details-value'>" + orderCode + @"</span>
+                </div>
+                <div class='payment-details-row'>
+                    <span class='payment-details-label'>Ngày thanh toán:</span>
+                    <span class='payment-details-value'>" + paymentDate + @"</span>
+                </div>
+                <div class='payment-details-row'>
+                    <span class='payment-details-label'>Phương thức:</span>
+                    <span class='payment-details-value'>PayOS</span>
+                </div>
+            </div>
+            <div class='appointment-info'>
+                <h3>Thông tin cuộc hẹn</h3>
+                <p><strong>Xe:</strong> " + vehicleInfo + @"</p>
+                <p><strong>Ngày hẹn:</strong> " + appointmentDate + @"</p>
+            </div>
+            <div class='next-steps'>
+                <h3>Bước tiếp theo</h3>
+                <p>Cuộc hẹn của bạn đã được xác nhận. Vui lòng đến đúng giờ hẹn tại trung tâm bảo dưỡng. Sau khi hoàn tất bảo dưỡng, bạn sẽ thanh toán phần còn lại.</p>
+            </div>
+        </div>
+        <div class='footer'>
+            <div class='footer-brand'>EV Service Center</div>
+            <p>Tra Vinh, Viet Nam</p>
+            <p>Email: <a href='mailto:support@evservicecenter.me'>support@evservicecenter.me</a> | Điện thoại: 0338302160</p>
+            <p>© 2025 EV Service Center. Tất cả quyền được bảo lưu.</p>
+        </div>
+    </div>
+</body>
+</html>";
+        }
+        public static string GenerateFinalPaymentConfirmationEmailTemplate(
+            string customerName,
+            int invoiceId,
+            int workOrderId,
+            decimal finalAmount,
+            decimal totalAmount,
+            decimal totalPaid,
+            string vehicleInfo,
+            string paymentDate,
+            string transactionId,
+            string orderCode,
+            string invoiceStatus)
+        {
+            string remainingAmount = (totalAmount - totalPaid).ToString("N0");
+            string statusText = invoiceStatus == "Paid" ? "Đã thanh toán đầy đủ" : "Đã thanh toán một phần";
+            string statusColor = invoiceStatus == "Paid" ? "#28a745" : "#ff9800";
+
+            return @"
+<!DOCTYPE html>
+<html lang='vi'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Xác nhận thanh toán cuối - EV Service Center</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; background: #f4f7fa; padding: 20px; }
+        .email-container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1); overflow: hidden; }
+        .header { background: linear-gradient(135deg, #007bff, #00c4cc); padding: 30px; text-align: center; position: relative; }
+        .header img { width: 100px; height: auto; margin-bottom: 15px; }
+        .header h1 { color: #ffffff; font-size: 24px; font-weight: 600; margin-bottom: 10px; }
+        .header p { color: rgba(255, 255, 255, 0.9); font-size: 14px; }
+        .content { padding: 40px; text-align: center; }
+        .greeting { font-size: 18px; color: #1a2b49; margin-bottom: 20px; font-weight: 600; }
+        .message { font-size: 15px; color: #4a5b6c; margin-bottom: 30px; line-height: 1.7; }
+        .payment-success { background: #d4edda; border: 2px solid #28a745; border-radius: 8px; padding: 20px; margin: 20px 0; }
+        .payment-success-icon { font-size: 48px; color: #28a745; margin-bottom: 10px; }
+        .payment-success-text { font-size: 18px; font-weight: 600; color: #155724; margin-bottom: 10px; }
+        .invoice-status { display: inline-block; padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; margin: 10px 0; background: " + statusColor + @"; color: #ffffff; }
+        .payment-details { margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: left; }
+        .payment-details h3 { color: #1a2b49; font-size: 16px; margin-bottom: 15px; font-weight: 600; }
+        .payment-details-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e0e4e8; }
+        .payment-details-row:last-child { border-bottom: none; }
+        .payment-details-label { color: #6c757d; font-size: 14px; font-weight: 500; }
+        .payment-details-value { color: #1a2b49; font-size: 14px; font-weight: 600; }
+        .amount-highlight { font-size: 24px; color: #28a745; font-weight: 700; }
+        .total-amount { background: #e3f2fd; padding: 15px; border-radius: 8px; margin: 15px 0; }
+        .total-amount-row { display: flex; justify-content: space-between; padding: 8px 0; }
+        .total-amount-label { font-size: 16px; font-weight: 600; color: #1a2b49; }
+        .total-amount-value { font-size: 20px; font-weight: 700; color: #007bff; }
+        .summary-info { margin: 20px 0; padding: 15px; background: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 8px; text-align: left; }
+        .summary-info h3 { color: #1565c0; font-size: 14px; margin-bottom: 8px; font-weight: 600; }
+        .summary-info p { color: #4a5b6c; font-size: 13px; margin-bottom: 5px; }
+        .footer { background: #f8f9fa; padding: 30px; text-align: center; border-top: 1px solid #e0e4e8; }
+        .footer-brand { font-size: 18px; font-weight: 700; color: #007bff; margin-bottom: 10px; }
+        .footer p { color: #6c757d; font-size: 12px; margin-bottom: 8px; }
+        .footer a { color: #007bff; text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+        @media (max-width: 600px) {
+            .email-container { margin: 10px; border-radius: 8px; }
+            .header { padding: 20px; }
+            .content { padding: 20px; }
+            .header img { width: 80px; }
+            .header h1 { font-size: 20px; }
+            .payment-details-row { flex-direction: column; }
+            .payment-details-value { margin-top: 5px; }
+        }
+    </style>
+</head>
+<body>
+    <div class='email-container'>
+        <div class='header'>
+            <img src='https://res.cloudinary.com/dphys6egj/image/upload/v1759812317/Pngtree_hipster_bike_electric_logo_design_4847419_wvci4k.jpg' alt='Logo EV Service Center'>
+            <h1>Xác nhận thanh toán cuối</h1>
+            <p>Thanh toán của bạn đã được xác nhận</p>
+        </div>
+        <div class='content'>
+            <div class='greeting'>Xin chào, " + customerName + @"!</div>
+            <div class='message'>
+                Cảm ơn bạn đã thanh toán cho dịch vụ bảo dưỡng. Chúng tôi đã nhận được thanh toán của bạn.
+            </div>
+            <div class='payment-success'>
+                <div class='payment-success-icon'>✓</div>
+                <div class='payment-success-text'>Thanh toán thành công!</div>
+                <div class='invoice-status'>" + statusText + @"</div>
+            </div>
+            <div class='payment-details'>
+                <h3>Chi tiết thanh toán lần này</h3>
+                <div class='payment-details-row'>
+                    <span class='payment-details-label'>Số tiền thanh toán:</span>
+                    <span class='payment-details-value amount-highlight'>" + finalAmount.ToString("N0") + @" VNĐ</span>
+                </div>
+                <div class='payment-details-row'>
+                    <span class='payment-details-label'>Mã hóa đơn:</span>
+                    <span class='payment-details-value'>" + invoiceId.ToString("D6") + @"</span>
+                </div>
+                <div class='payment-details-row'>
+                    <span class='payment-details-label'>Mã đơn hàng:</span>
+                    <span class='payment-details-value'>" + workOrderId.ToString("D6") + @"</span>
+                </div>
+                <div class='payment-details-row'>
+                    <span class='payment-details-label'>Mã giao dịch:</span>
+                    <span class='payment-details-value'>" + transactionId + @"</span>
+                </div>
+                <div class='payment-details-row'>
+                    <span class='payment-details-label'>Mã đơn hàng PayOS:</span>
+                    <span class='payment-details-value'>" + orderCode + @"</span>
+                </div>
+                <div class='payment-details-row'>
+                    <span class='payment-details-label'>Ngày thanh toán:</span>
+                    <span class='payment-details-value'>" + paymentDate + @"</span>
+                </div>
+                <div class='payment-details-row'>
+                    <span class='payment-details-label'>Phương thức:</span>
+                    <span class='payment-details-value'>PayOS</span>
+                </div>
+            </div>
+            <div class='total-amount'>
+                <div class='total-amount-row'>
+                    <span class='total-amount-label'>Tổng tiền hóa đơn:</span>
+                    <span class='total-amount-value'>" + totalAmount.ToString("N0") + @" VNĐ</span>
+                </div>
+                <div class='total-amount-row'>
+                    <span class='total-amount-label'>Đã thanh toán:</span>
+                    <span class='total-amount-value'>" + totalPaid.ToString("N0") + @" VNĐ</span>
+                </div>" +
+                (invoiceStatus == "PartiallyPaid" ? @"
+                <div class='total-amount-row'>
+                    <span class='total-amount-label'>Còn lại:</span>
+                    <span class='total-amount-value' style='color: #ff9800;'>" + remainingAmount + @" VNĐ</span>
+                </div>" : "") + @"
+            </div>
+            <div class='summary-info'>
+                <h3>Thông tin dịch vụ</h3>
+                <p><strong>Xe:</strong> " + vehicleInfo + @"</p>
+                <p><strong>Trạng thái hóa đơn:</strong> " + statusText + @"</p>
             </div>
         </div>
         <div class='footer'>
