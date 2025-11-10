@@ -107,6 +107,7 @@ builder.Services.AddHostedService<SlotGenerationBackgroundService>();
 builder.Services.AddScoped<AppointmentSlotDao>();
 builder.Services.AddScoped<AppointmentDao>();
 builder.Services.AddScoped<WorkOrderDao>();
+builder.Services.AddScoped<InvoiceDao>();
 builder.Services.AddScoped<PayOSService>();
 builder.Services.Configure<PayOSSettings>(builder.Configuration.GetSection("PayOS"));
 builder.Services.Configure<ForwardedHeadersOptions>(option =>
