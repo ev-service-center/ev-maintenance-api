@@ -85,5 +85,28 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 .OrderBy(c => c.SentDate)
                 .ToListAsync();
         }
+
+        public async Task<Chat> UpdateChatAsync(Chat chat)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var existingChat = await _context.Chats.FirstOrDefaultAsync(c => c.ChatId == chat.ChatId);
+                if (existingChat == null)
+                    throw new Exception($"Chat with ID {chat.ChatId} not found.");
+
+                existingChat.Message = chat.Message;
+                existingChat.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return existingChat;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception($"Failed to update chat with ID {chat.ChatId}.", ex);
+            }
+        }
     }
 }

@@ -134,5 +134,42 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             }
         }
 
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Customer,Staff")]
+        public async Task<IActionResult> UpdateChat(int id, [FromBody] ChatUpdateRequestDto dto)
+        {
+            try
+            {
+                if (id != dto.ChatId)
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Chat ID mismatch."));
+
+                var chat = new Chat
+                {
+                    ChatId = dto.ChatId,
+                    ConversationId = dto.ConversationId,
+                    SenderId = dto.SenderId,
+                    Message = dto.Message
+                };
+
+                var updatedChat = await _chatDao.UpdateChatAsync(chat);
+                var updatedDto = new ChatResponseDto
+                {
+                    ChatId = updatedChat.ChatId,
+                    ConversationId = updatedChat.ConversationId,
+                    SenderId = updatedChat.SenderId,
+                    Message = updatedChat.Message,
+                    SentDate = updatedChat.SentDate,
+                    CreatedAt = updatedChat.CreatedAt,
+                    UpdatedAt = updatedChat.UpdatedAt
+                };
+
+                return Ok(new ApiResponse<ChatResponseDto>(200, "Success", "Chat updated successfully.", data: updatedDto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
     }
 }

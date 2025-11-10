@@ -20,4 +20,12 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         [Required] public int SenderId { get; set; }
         [Required] public string Message { get; set; } = null!;
     }
+
+    public class ChatUpdateRequestDto
+    {
+        [Required] public int ChatId { get; set; }
+        [Required] public int ConversationId { get; set; }
+        [Required] public int SenderId { get; set; }
+        [Required] public string Message { get; set; } = null!;
+    }
 }
