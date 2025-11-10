@@ -2,7 +2,9 @@ using System.Security.Claims;
 using EVServiceCenterMaintenanceAPI.DAO;
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Enums;
+using EVServiceCenterMaintenanceAPI.Helpers;
 using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Services;
 using EVServiceCenterMaintenanceAPI.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,12 +19,16 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         private readonly WorkOrderDao _workOrderDao;
         private readonly EvserviceCenterDbContext _context;
         private readonly PayOSService _payOSService;
+        private readonly ILogger<WorkOrderController> _logger;
+        private readonly EmailService _emailService;
 
-        public WorkOrderController(WorkOrderDao workOrderDao, EvserviceCenterDbContext context, PayOSService payOSService)
+        public WorkOrderController(WorkOrderDao workOrderDao, EvserviceCenterDbContext context, PayOSService payOSService, ILogger<WorkOrderController> logger, EmailService emailService)
         {
             _workOrderDao = workOrderDao;
             _context = context;
             _payOSService = payOSService;
+            _logger = logger;
+            _emailService = emailService;
         }
 
         [HttpPost]
@@ -203,6 +209,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             var workOrder = await _context.WorkOrders
                 .Include(w => w.Appointment)
                     .ThenInclude(a => a.Slot)
+                .Include(w => w.Invoice)
+                .Include(w => w.Customer)
+                .Include(w => w.Vehicle)
                 .FirstOrDefaultAsync(w => w.WorkOrderId == id);
             if (workOrder == null)
             {
@@ -212,7 +221,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             {
                 return BadRequest(new ApiResponse<object>(400, "BadRequest", "No appointment found for this work order."));
             }
-            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var userIdClaim = User.FindFirst("UserId")?.Value;
             if (userIdClaim == null || !int.TryParse(userIdClaim, out int currentUserId))
             {
                 return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "User not authenticated."));
@@ -234,13 +243,162 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     .Where(s => serviceIds.Contains(s.ServiceId))
                     .ToListAsync();
                 decimal totalCost = services.Sum(s => s.BasePrice);
-                var paymentLinkInformation = await _payOSService.GetPaymentLinkInformation(workOrder.WorkOrderId);
+
+                if (string.IsNullOrEmpty(workOrder.OrderCode))
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "No payment link found for this work order. OrderCode is missing."));
+                }
+
+                long orderCode = long.Parse(workOrder.OrderCode);
+                var paymentLinkInformation = await _payOSService.GetPaymentLinkInformation(orderCode);
                 if (paymentLinkInformation.status == "PAID")
                 {
                     if (paymentLinkInformation.amountPaid != totalCost || paymentLinkInformation.amountRemaining != 0)
                     {
                         return BadRequest(new ApiResponse<object>(400, "BadRequest", "Payment amount mismatch."));
                     }
+
+                    // Check if Payment record already exists (from webhook)
+                    var existingPayment = await _context.Payments
+                        .FirstOrDefaultAsync(p => p.WorkOrderId == workOrder.WorkOrderId);
+
+                    if (existingPayment == null)
+                    {
+
+                        // Get transaction info from PayOS
+                        var transaction = paymentLinkInformation.transactions?.FirstOrDefault();
+                        if (transaction == null)
+                        {
+                            _logger.LogError("No transaction found in PaymentLinkInformation for WorkOrder {WorkOrderId}", workOrder.WorkOrderId);
+                            return StatusCode(500, new ApiResponse<object>(500, "InternalServerError",
+                                "Payment was successful but transaction details are missing. Please contact support."));
+                        }
+
+                        string paymentType;
+                        int? invoiceId = null;
+
+                        if (workOrder.Invoice == null)
+                        {
+                            paymentType = "Deposit";
+                        }
+                        else
+                        {
+                            paymentType = "Final";
+                            invoiceId = workOrder.Invoice.InvoiceId;
+                        }
+
+                        // Parse payment date and ensure UTC
+                        DateTime paymentDateTime = DateTime.Parse(transaction.transactionDateTime);
+                        if (paymentDateTime.Kind == DateTimeKind.Unspecified)
+                        {
+                            paymentDateTime = DateTime.SpecifyKind(paymentDateTime, DateTimeKind.Utc);
+                        }
+
+                        var payment = new Payment
+                        {
+                            WorkOrderId = workOrder.WorkOrderId,
+                            InvoiceId = invoiceId,
+                            Method = "PayOS",
+                            Amount = paymentLinkInformation.amountPaid,
+                            TransactionId = transaction.reference,
+                            PaymentDate = paymentDateTime.ToUniversalTime(),
+                            PaymentType = paymentType,
+                            OrderCode = orderCode.ToString(),
+                            CreatedAt = DateTime.UtcNow,
+                            UpdatedAt = DateTime.UtcNow
+                        };
+                        _context.Payments.Add(payment);
+                        _logger.LogInformation($"Payment record created manually for WorkOrder {workOrder.WorkOrderId} - Type: {paymentType}, Amount: {payment.Amount} (webhook may have failed)");
+
+                        // Send confirmation email using FireAndForget
+                        if (!string.IsNullOrEmpty(workOrder.Customer?.Email))
+                        {
+                            string vehicleInfo = workOrder.Vehicle != null
+                                ? $"{workOrder.Vehicle.Model ?? "N/A"} ({workOrder.Vehicle.Plate ?? "N/A"})"
+                                : "N/A";
+
+                            string appointmentDate = workOrder.Appointment.Slot != null
+                                ? workOrder.Appointment.Slot.StartTime.ConvertToVietnamTime().ToString("dd/MM/yyyy HH:mm")
+                                : "N/A";
+
+                            // Parse transaction time and convert to Vietnam time
+                            DateTime transactionTime = DateTime.Parse(transaction.transactionDateTime);
+                            if (transactionTime.Kind == DateTimeKind.Unspecified)
+                            {
+                                transactionTime = DateTime.SpecifyKind(transactionTime, DateTimeKind.Utc);
+                            }
+                            string paymentDateFormatted = transactionTime.ToUniversalTime().ConvertToVietnamTime().ToString("dd/MM/yyyy HH:mm:ss");
+
+                            string customerName = workOrder.Customer?.FullName ?? "Khách hàng";
+                            string customerEmail = workOrder.Customer!.Email;
+                            string transactionId = transaction.reference;
+                            string orderCodeStr = orderCode.ToString();
+
+                            if (paymentType == "Deposit")
+                            {
+                                decimal amountCopy = payment.Amount;
+                                int workOrderIdCopy = workOrder.WorkOrderId;
+
+                                TaskHelper.FireAndForget(async () =>
+                                {
+                                    try
+                                    {
+                                        await _emailService.SendDepositPaymentConfirmationEmailAsync(
+                                            customerName,
+                                            customerEmail,
+                                            workOrderIdCopy,
+                                            amountCopy,
+                                            vehicleInfo,
+                                            appointmentDate,
+                                            paymentDateFormatted,
+                                            transactionId,
+                                            orderCodeStr
+                                        );
+                                        _logger.LogInformation($"Deposit payment confirmation email sent to {customerEmail} for WorkOrder {workOrderIdCopy}");
+                                    }
+                                    catch (Exception emailEx)
+                                    {
+                                        _logger.LogError(emailEx, $"Failed to send deposit payment confirmation email for WorkOrder {workOrderIdCopy}");
+                                    }
+                                });
+                            }
+                            else
+                            {
+                                int invoiceIdCopy = workOrder.Invoice?.InvoiceId ?? 0;
+                                int workOrderIdCopy = workOrder.WorkOrderId;
+                                decimal finalAmountCopy = payment.Amount;
+                                decimal totalAmountCopy = workOrder.Invoice?.TotalAmount ?? 0;
+                                string invoiceStatusCopy = workOrder.Invoice?.Status ?? "N/A";
+
+                                TaskHelper.FireAndForget(async () =>
+                                {
+                                    try
+                                    {
+                                        await _emailService.SendFinalPaymentConfirmationEmailAsync(
+                                            customerName,
+                                            customerEmail,
+                                            invoiceIdCopy,
+                                            workOrderIdCopy,
+                                            finalAmountCopy,
+                                            totalAmountCopy,
+                                            finalAmountCopy,
+                                            vehicleInfo,
+                                            paymentDateFormatted,
+                                            transactionId,
+                                            orderCodeStr,
+                                            invoiceStatusCopy
+                                        );
+                                        _logger.LogInformation($"Final payment confirmation email sent to {customerEmail} for WorkOrder {workOrderIdCopy}");
+                                    }
+                                    catch (Exception emailEx)
+                                    {
+                                        _logger.LogError(emailEx, $"Failed to send final payment confirmation email for WorkOrder {workOrderIdCopy}");
+                                    }
+                                });
+                            }
+                        }
+                    }
+
                     workOrder.Appointment.Status = AppointmentStatus.Confirmed.ToString();
                     await _context.SaveChangesAsync();
                     return Ok(new ApiResponse<object>(200, "Success", "Payment confirmed. Appointment status updated to Confirmed."));

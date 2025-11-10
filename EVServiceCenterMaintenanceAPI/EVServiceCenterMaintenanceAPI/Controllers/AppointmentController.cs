@@ -241,15 +241,6 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 var vehicleError = await ValidateVehicleBelongsToCustomerAsync(dto.VehicleId, dto.CustomerId);
                 if (vehicleError != null) return vehicleError;
 
-                // Validation: AppointmentDate không được trong quá khứ (theo giờ Vietnam)
-                var todayVietnam = TimeZoneHelper.TodayInVietnam;
-                var appointmentDateVN = dto.AppointmentDate.ConvertToVietnamTime();
-                if (appointmentDateVN.Date < todayVietnam)
-                {
-                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
-                        "Appointment date cannot be in the past."));
-                }
-
                 using var transaction = await _context.Database.BeginTransactionAsync();
                 try
                 {
@@ -257,22 +248,28 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     var (slotSuccess, slot, slotError) = await ValidateAndLockSlotAsync(dto.SlotId, dto.CenterId);
                     if (!slotSuccess) return slotError!;
 
+                    // Validate slot time has not passed
+                    var nowVietnam = DateTime.UtcNow.ConvertToVietnamTime();
+                    var slotStartTimeVN = slot!.StartTime.ConvertToVietnamTime();
+                    if (slotStartTimeVN <= nowVietnam)
+                    {
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                            "Cannot create appointment for a slot that has already passed. Please select a future slot."));
+                    }
+
                     // Validate services and calculate cost
                     var serviceIds = dto.ServiceIds ?? [];
                     var (servicesSuccess, totalCost, servicesError) = await ValidateServicesAndCalculateCostAsync(serviceIds);
                     if (!servicesSuccess) return servicesError!;
 
-                    // Mark slot as unavailable
-                    slot!.IsAvailable = false;
-
-                    // Create appointment
+                    // Create appointment - AppointmentDate is auto-set from Slot.StartTime
                     var appointment = new Appointment
                     {
                         CustomerId = dto.CustomerId,
                         VehicleId = dto.VehicleId,
                         CenterId = dto.CenterId,
                         SlotId = dto.SlotId,
-                        AppointmentDate = dto.AppointmentDate,
+                        AppointmentDate = slot.StartTime,
                         Notes = dto.Notes,
                         Status = AppointmentStatus.Pending.ToString(),
                         Amount = totalCost,
@@ -359,15 +356,6 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 var vehicleError = await ValidateVehicleBelongsToCustomerAsync(dto.VehicleId, dto.CustomerId);
                 if (vehicleError != null) return vehicleError;
 
-                // Validation: AppointmentDate không được trong quá khứ (theo giờ Vietnam)
-                var todayVietnam = TimeZoneHelper.TodayInVietnam;
-                var appointmentDateVN = dto.AppointmentDate.ConvertToVietnamTime();
-                if (appointmentDateVN.Date < todayVietnam)
-                {
-                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
-                        "Appointment date cannot be in the past."));
-                }
-
                 // Validation: BookingAppointment phải có ít nhất 1 service
                 var serviceIds = dto.ServiceIds ?? [];
                 if (serviceIds.Count == 0)
@@ -383,21 +371,28 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     var (slotSuccess, slot, slotError) = await ValidateAndLockSlotAsync(dto.SlotId, dto.CenterId);
                     if (!slotSuccess) return slotError!;
 
+                    // Validate slot time has not passed
+                    var nowVietnam = DateTime.UtcNow.ConvertToVietnamTime();
+                    var slotStartTimeVN = slot!.StartTime.ConvertToVietnamTime();
+                    if (slotStartTimeVN <= nowVietnam)
+                    {
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                            "Cannot book a slot that has already passed. Please select a future slot."));
+                    }
+
                     // Validate services and calculate cost
                     var (servicesSuccess, totalCost, servicesError) = await ValidateServicesAndCalculateCostAsync(serviceIds);
                     if (!servicesSuccess) return servicesError!;
 
-                    // Mark slot as unavailable
-                    slot!.IsAvailable = false;
 
-                    // Create appointment
+                    // Create appointment - AppointmentDate is auto-set from Slot.StartTime
                     var appointment = new Appointment
                     {
                         CustomerId = dto.CustomerId,
                         VehicleId = dto.VehicleId,
                         CenterId = dto.CenterId,
                         SlotId = dto.SlotId,
-                        AppointmentDate = dto.AppointmentDate,
+                        AppointmentDate = slot.StartTime,
                         Notes = dto.Notes,
                         Status = AppointmentStatus.Pending.ToString(),
                         Amount = totalCost,
@@ -441,6 +436,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         cancelUrl,
                         successUrl
                     );
+
+                    createdWorkOrder.OrderCode = paymentResult.orderCode.ToString();
+                    await _context.SaveChangesAsync();
 
                     await transaction.CommitAsync();
 

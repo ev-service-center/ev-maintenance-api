@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using EVServiceCenterMaintenanceAPI.Models;
 using Microsoft.EntityFrameworkCore;
 using EVServiceCenterMaintenanceAPI.Params;
@@ -23,19 +19,16 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
         public async Task<Appointment> CreateAppointmentAsync(Appointment appointment)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
                 appointment.CreatedAt = DateTime.UtcNow;
                 appointment.UpdatedAt = DateTime.UtcNow;
                 _context.Appointments.Add(appointment);
                 await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
                 return appointment;
             }
             catch (Exception ex)
             {
-                await transaction.RollbackAsync();
                 throw new Exception("Failed to create appointment." + ex.Message, ex);
             }
         }

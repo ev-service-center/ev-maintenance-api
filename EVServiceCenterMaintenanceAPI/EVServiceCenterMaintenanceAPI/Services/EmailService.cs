@@ -138,6 +138,86 @@ namespace EVServiceCenterMaintenanceAPI.Services
             }
         }
 
+        public async Task<bool> SendDepositPaymentConfirmationEmailAsync(
+            string customerName,
+            string toEmail,
+            int workOrderId,
+            decimal depositAmount,
+            string vehicleInfo,
+            string appointmentDate,
+            string paymentDate,
+            string transactionId,
+            string orderCode)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(toEmail))
+                {
+                    return false;
+                }
+
+                var message = EmailTemplate.GenerateDepositPaymentConfirmationEmailTemplate(
+                    customerName,
+                    workOrderId,
+                    depositAmount,
+                    vehicleInfo,
+                    appointmentDate,
+                    paymentDate,
+                    transactionId,
+                    orderCode);
+
+                await SendEmailAsync(toEmail, "Xác nhận thanh toán cọc - EV Service Center", message, true);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        public async Task<bool> SendFinalPaymentConfirmationEmailAsync(
+            string customerName,
+            string toEmail,
+            int invoiceId,
+            int workOrderId,
+            decimal finalAmount,
+            decimal totalAmount,
+            decimal totalPaid,
+            string vehicleInfo,
+            string paymentDate,
+            string transactionId,
+            string orderCode,
+            string invoiceStatus)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(toEmail))
+                {
+                    return false;
+                }
+
+                var message = EmailTemplate.GenerateFinalPaymentConfirmationEmailTemplate(
+                    customerName,
+                    invoiceId,
+                    workOrderId,
+                    finalAmount,
+                    totalAmount,
+                    totalPaid,
+                    vehicleInfo,
+                    paymentDate,
+                    transactionId,
+                    orderCode,
+                    invoiceStatus);
+
+                await SendEmailAsync(toEmail, "Xác nhận thanh toán cuối - EV Service Center", message, true);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
         private async Task SendEmailViaSendGridApiAsync(string toEmail, string subject, string body, bool isBodyHtml)
         {
             var apiKey = _emailSetting.Password; // SendGrid API Key

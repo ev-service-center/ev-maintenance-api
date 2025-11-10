@@ -27,6 +27,8 @@ public partial class WorkOrder
 
     public string? Notes { get; set; }
 
+    public string? OrderCode { get; set; }
+
     public virtual Appointment? Appointment { get; set; }
 
     public virtual ICollection<AppointmentService> AppointmentServices { get; set; } = new List<AppointmentService>();

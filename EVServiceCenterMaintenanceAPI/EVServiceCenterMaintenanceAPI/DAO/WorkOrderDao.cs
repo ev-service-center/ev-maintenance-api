@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using EVServiceCenterMaintenanceAPI.Models;
 using Microsoft.EntityFrameworkCore;
 using EVServiceCenterMaintenanceAPI.Enums;
@@ -20,7 +16,6 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
         public async Task<WorkOrder> CreateWorkOrderAsync(WorkOrder workOrder, List<int> serviceIds)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
                 workOrder.CheckInAt = DateTime.UtcNow;
@@ -68,9 +63,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                     await _context.SaveChangesAsync();
                 }
 
-                await transaction.CommitAsync();
-
-                return await _context.WorkOrders
+                var result = await _context.WorkOrders
                     .Include(wo => wo.Center)
                     .Include(wo => wo.Customer)
                     .Include(wo => wo.Vehicle)
@@ -78,15 +71,16 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                     .Include(wo => wo.AppointmentServices)
                         .ThenInclude(aps => aps.Service)
                     .FirstOrDefaultAsync(wo => wo.WorkOrderId == workOrder.WorkOrderId);
+
+                return result ?? throw new InvalidOperationException("Failed to retrieve created WorkOrder.");
             }
             catch
             {
-                await transaction.RollbackAsync();
                 throw;
             }
         }
 
-        public async Task<WorkOrder> GetWorkOrderByIdAsync(int id)
+        public async Task<WorkOrder?> GetWorkOrderByIdAsync(int id)
         {
             return await _context.WorkOrders
                 .Include(wo => wo.Center)
@@ -179,7 +173,6 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
         public async Task<WorkOrder> UpdateWorkOrderAsync(WorkOrder workOrder, List<int> serviceIds)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
                 var existingWorkOrder = await _context.WorkOrders
@@ -250,9 +243,8 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 }
 
                 await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
 
-                return await _context.WorkOrders
+                var result = await _context.WorkOrders
                     .Include(wo => wo.Center)
                     .Include(wo => wo.Customer)
                     .Include(wo => wo.Vehicle)
@@ -260,10 +252,11 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                     .Include(wo => wo.AppointmentServices)
                         .ThenInclude(aps => aps.Service)
                     .FirstOrDefaultAsync(wo => wo.WorkOrderId == workOrder.WorkOrderId);
+
+                return result ?? throw new InvalidOperationException("Failed to retrieve updated WorkOrder.");
             }
             catch
             {
-                await transaction.RollbackAsync();
                 throw;
             }
         }

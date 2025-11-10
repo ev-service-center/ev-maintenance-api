@@ -406,16 +406,20 @@ public partial class EvserviceCenterDbContext : DbContext
                 .HasColumnType("datetime");
             entity.Property(e => e.InvoiceId).HasColumnName("InvoiceID");
             entity.Property(e => e.Method).HasMaxLength(50);
+            entity.Property(e => e.OrderCode).HasMaxLength(50);
             entity.Property(e => e.PaymentDate)
                 .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
+            entity.Property(e => e.PaymentType)
+                .HasMaxLength(20)
+                .HasDefaultValue("Full");
+            entity.Property(e => e.TransactionId).HasMaxLength(100);
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
 
             entity.HasOne(d => d.Invoice).WithMany(p => p.Payments)
                 .HasForeignKey(d => d.InvoiceId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__Payments__Invoic__17F790F9");
         });
 
@@ -526,9 +530,13 @@ public partial class EvserviceCenterDbContext : DbContext
         {
             entity.HasKey(e => e.VehicleId).HasName("PK__Vehicles__476B54B208F27BA2");
 
-            entity.HasIndex(e => e.Plate, "UQ__Vehicles__830E47DC5C2540F7").IsUnique();
+            entity.HasIndex(e => e.Plate, "IX_UniqueActivePlate")
+                .IsUnique()
+                .HasFilter("([Status]='Active')");
 
-            entity.HasIndex(e => e.Vin, "UQ__Vehicles__C5DF234CFDB5D8ED").IsUnique();
+            entity.HasIndex(e => e.Vin, "IX_UniqueActiveVIN")
+                .IsUnique()
+                .HasFilter("([Status]='Active')");
 
             entity.Property(e => e.VehicleId).HasColumnName("VehicleID");
             entity.Property(e => e.Color).HasMaxLength(50);
@@ -565,6 +573,9 @@ public partial class EvserviceCenterDbContext : DbContext
 
             entity.Property(e => e.CheckInAt).HasColumnType("datetime");
             entity.Property(e => e.CheckOutAt).HasColumnType("datetime");
+            entity.Property(e => e.OrderCode)
+                .HasMaxLength(50)
+                .IsUnicode(false);
             entity.Property(e => e.Status)
                 .HasMaxLength(50)
                 .HasDefaultValue("Pending");
