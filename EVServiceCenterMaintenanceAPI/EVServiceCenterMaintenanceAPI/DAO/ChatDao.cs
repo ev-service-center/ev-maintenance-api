@@ -78,5 +78,12 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             return (chats, total);
         }
 
+        public async Task<List<Chat>> GetChatsByConversationIdAsync(int conversationId)
+        {
+            return await _context.Chats
+                .Where(c => c.ConversationId == conversationId)
+                .OrderBy(c => c.SentDate)
+                .ToListAsync();
+        }
     }
 }
