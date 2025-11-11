@@ -7,6 +7,7 @@ namespace EVServiceCenterMaintenanceAPI.Params
         public InvoiceStatus? Status { get; set; }
         public int? CustomerId { get; set; }
         public int? WorkOrderId { get; set; }
+        public int? CenterId { get; set; }
     }
 }
 

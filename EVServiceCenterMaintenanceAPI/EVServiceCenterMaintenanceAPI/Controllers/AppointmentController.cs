@@ -297,13 +297,13 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 var vehicleError = await ValidateVehicleBelongsToCustomerAsync(dto.VehicleId, dto.CustomerId);
                 if (vehicleError != null) return vehicleError;
 
-                // Validation: Service Center is Open (replacing trigger TRG_CheckCenterServiceUserStatus)
+                // Validation: Service Center is Open
                 var center = await _context.ServiceCenters.FindAsync(dto.CenterId);
                 if (center!.Status != ServiceCenterStatus.Open.ToString())
                     return BadRequest(new ApiResponse<object>(400, "BadRequest",
                         "Service center is not open. Cannot create appointment."));
 
-                // Validation: Customer is Active (replacing trigger TRG_CheckCenterServiceUserStatus)
+                // Validation: Customer is Active
                 var customer = await _userDao.GetUserByIdAsync(dto.CustomerId);
                 if (customer == null)
                     return NotFound(new ApiResponse<object>(404, "NotFound", "Customer not found."));
@@ -441,13 +441,13 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 var vehicleError = await ValidateVehicleBelongsToCustomerAsync(dto.VehicleId, dto.CustomerId);
                 if (vehicleError != null) return vehicleError;
 
-                // Validation: Service Center is Open (replacing trigger TRG_CheckCenterServiceUserStatus)
+                // Validation: Service Center is Open
                 var center = await _context.ServiceCenters.FindAsync(dto.CenterId);
                 if (center!.Status != ServiceCenterStatus.Open.ToString())
                     return BadRequest(new ApiResponse<object>(400, "BadRequest",
                         "Service center is not open. Cannot create appointment."));
 
-                // Validation: Customer is Active (replacing trigger TRG_CheckCenterServiceUserStatus)
+                // Validation: Customer is Active
                 if (currentUser!.Status != UserStatus.Active.ToString())
                     return BadRequest(new ApiResponse<object>(400, "BadRequest",
                         "Your account is not active. Cannot create appointment."));
@@ -542,7 +542,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         items,
                         cancelUrl,
                         successUrl
-                        // expirationMinutes: 15 (default - slot reservation time)
+                    // expirationMinutes: 15 (default - slot reservation time)
                     );
 
                     createdWorkOrder.OrderCode = paymentResult.orderCode.ToString();
@@ -865,7 +865,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 var finalVehicleId = dto.VehicleId ?? existingAppointment.VehicleId;
                 var finalCenterId = dto.CenterId ?? existingAppointment.CenterId;
 
-                // Validation: Center exists and is Open (nếu thay đổi) (replacing trigger TRG_CheckCenterServiceUserStatus)
+                // Validation: Center exists and is Open (nếu thay đổi)
                 if (dto.CenterId.HasValue)
                 {
                     var centerError = await ValidateCenterExistsAsync(dto.CenterId.Value);
@@ -877,7 +877,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                             "Service center is not open. Cannot update appointment to this center."));
                 }
 
-                // Validation: Customer is Active (nếu thay đổi) (replacing trigger TRG_CheckCenterServiceUserStatus)
+                // Validation: Customer is Active (nếu thay đổi)
                 if (dto.CustomerId.HasValue)
                 {
                     var customer = await _userDao.GetUserByIdAsync(dto.CustomerId.Value);
@@ -963,7 +963,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         return BadRequest(new ApiResponse<object>(400, "BadRequest",
                             "Assigned user must have Technician role."));
 
-                    // Validation: Technician is Active (replacing trigger TRG_CheckCenterServiceUserStatus)
+                    // Validation: Technician is Active
                     if (technician.Status != UserStatus.Active.ToString())
                         return BadRequest(new ApiResponse<object>(400, "BadRequest",
                             "Technician account is not active. Cannot assign."));
@@ -1054,7 +1054,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     return BadRequest(new ApiResponse<object>(400, "BadRequest",
                         "Assigned user must have Technician role."));
 
-                // Validation: Technician is Active (replacing trigger TRG_CheckCenterServiceUserStatus)
+                // Validation: Technician is Active
                 if (technician.Status != UserStatus.Active.ToString())
                     return BadRequest(new ApiResponse<object>(400, "BadRequest",
                         "Technician account is not active. Cannot assign."));
