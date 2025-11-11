@@ -101,6 +101,7 @@ builder.Services.AddScoped<PartDao>();
 builder.Services.AddScoped<ServiceCenterDao>();
 builder.Services.AddScoped<EmployeeDao>();
 builder.Services.AddScoped<ReminderDao>();
+builder.Services.AddScoped<ConversationDao>();
 builder.Services.AddScoped<ChatDao>();
 builder.Services.AddScoped<MaintenanceHistoryDao>();
 builder.Services.AddScoped<PartUsageDao>();
