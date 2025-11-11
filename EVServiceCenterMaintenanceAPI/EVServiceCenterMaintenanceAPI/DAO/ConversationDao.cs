@@ -123,5 +123,26 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 throw new Exception($"Failed to update conversation with ID {conversation.ConversationId}.", ex);
             }
         }
+
+        public async Task<bool> DeleteConversationAsync(int conversationId)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var conversation = await _context.Conversations.FindAsync(conversationId);
+                if (conversation == null)
+                    return false;
+
+                _context.Conversations.Remove(conversation);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception($"Failed to delete conversation with ID {conversationId}.", ex);
+            }
+        }
     }
 }
