@@ -80,6 +80,11 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             try
             {
+                if (!dto.DueDate.HasValue)
+                {
+                    dto.DueDate = DateTime.UtcNow.AddDays(7);
+                }
+
                 if (!ModelState.IsValid)
                 {
                     var errors = ModelState
@@ -158,7 +163,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 {
                     WorkOrderId = dto.WorkOrderId,
                     TotalAmount = finalTotal,
-                    DueDate = dto.DueDate ?? DateTime.UtcNow.AddDays(7), // Default: 7 days
+                    DueDate = dto.DueDate.Value,
                     Status = InvoiceStatus.Unpaid.ToString()
                 };
 

@@ -57,13 +57,6 @@ public partial class EvserviceCenterDbContext : DbContext
         {
             entity.HasKey(e => e.AppointmentId).HasName("PK__Appointm__8ECDFCA2E2E2CAC6");
 
-            entity.ToTable(tb =>
-                {
-                    tb.HasTrigger("TRG_Appointments_Update");
-                    tb.HasTrigger("TRG_CheckCenterServiceUserStatus");
-                    tb.HasTrigger("TRG_EnsureSlotAvailability");
-                });
-
             entity.HasIndex(e => e.CustomerId, "IDX_Appointments_CustomerID");
 
             entity.HasIndex(e => e.SlotId, "IDX_Appointments_SlotID");
@@ -397,7 +390,9 @@ public partial class EvserviceCenterDbContext : DbContext
 
         modelBuilder.Entity<Payment>(entity =>
         {
-            entity.HasKey(e => e.PaymentId).HasName("PK__Payments__9B556A58CBF7E82D");
+            entity.HasKey(e => e.PaymentId).HasName("PK__Payments__9B556A580D40F518");
+
+            entity.HasIndex(e => e.WorkOrderId, "IDX_Payments_WorkOrderID");
 
             entity.Property(e => e.PaymentId).HasColumnName("PaymentID");
             entity.Property(e => e.Amount).HasColumnType("decimal(18, 2)");
@@ -417,10 +412,15 @@ public partial class EvserviceCenterDbContext : DbContext
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("(getutcdate())")
                 .HasColumnType("datetime");
+            entity.Property(e => e.WorkOrderId).HasColumnName("WorkOrderID");
 
             entity.HasOne(d => d.Invoice).WithMany(p => p.Payments)
                 .HasForeignKey(d => d.InvoiceId)
-                .HasConstraintName("FK__Payments__Invoic__17F790F9");
+                .HasConstraintName("FK__Payments__Invoic__3AD6B8E2");
+
+            entity.HasOne(d => d.WorkOrder).WithMany(p => p.Payments)
+                .HasForeignKey(d => d.WorkOrderId)
+                .HasConstraintName("FK__Payments__WorkOrder__WorkOrderID");
         });
 
         modelBuilder.Entity<Reminder>(entity =>

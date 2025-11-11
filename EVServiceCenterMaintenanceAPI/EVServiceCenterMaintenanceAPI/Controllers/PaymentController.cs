@@ -146,6 +146,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         payment = new Payment
                         {
                             InvoiceId = null,
+                            WorkOrderId = workOrder.WorkOrderId,
                             Amount = webhookData.amount,
                             Method = "PayOS",
                             PaymentType = paymentType,
@@ -244,6 +245,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         payment = new Payment
                         {
                             InvoiceId = workOrder.Invoice.InvoiceId,
+                            WorkOrderId = workOrder.WorkOrderId,
                             Amount = webhookData.amount,
                             Method = "PayOS",
                             PaymentType = paymentType,
