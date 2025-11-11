@@ -41,5 +41,7 @@ public partial class WorkOrder
 
     public virtual ICollection<MaintenanceHistory> MaintenanceHistories { get; set; } = new List<MaintenanceHistory>();
 
+    public virtual ICollection<Payment> Payments { get; set; } = new List<Payment>();
+
     public virtual Vehicle Vehicle { get; set; } = null!;
 }
