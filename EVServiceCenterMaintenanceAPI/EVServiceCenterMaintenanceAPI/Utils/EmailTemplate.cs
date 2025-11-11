@@ -638,5 +638,108 @@ namespace EVServiceCenterMaintenanceAPI.Utils
 </body>
 </html>";
         }
+
+        public static string GenerateMaintenanceHistoryEmailTemplate(MaintenanceHistoryResponseDto history)
+        {
+            string userName = history.WorkOrderDetails?.CustomerDetails?.FullName ?? "Khách hàng";
+            string vehicleInfo = $"{history.VehicleDetails?.Model ?? "N/A"} ({history.VehicleDetails?.Plate ?? "N/A"})";
+            string maintenanceDate = history.MaintenanceDate.ToString("dd/MM/yyyy");
+            string description = string.IsNullOrWhiteSpace(history.Description) ? "Không có mô tả" : history.Description!;
+            string notes = string.IsNullOrWhiteSpace(history.Notes) ? "Không có ghi chú" : history.Notes!;
+            string cost = history.Cost.HasValue ? history.Cost.Value.ToString("N0") + " VNĐ" : "N/A";
+            string mileage = history.MileageAtMaintenance.HasValue ? history.MileageAtMaintenance.Value.ToString("N0") + " km" : "N/A";
+            string workOrderId = history.WorkOrderId?.ToString() ?? "N/A";
+            string serviceNames = history.WorkOrderDetails?.ServiceDetails != null && history.WorkOrderDetails.ServiceDetails.Any()
+                ? string.Join(", ", history.WorkOrderDetails.ServiceDetails.Select(s => s.ServiceName))
+                : "Không có dịch vụ";
+            string centerName = history.WorkOrderDetails?.CenterDetails?.CenterName ?? "N/A";
+            string centerAddress = history.WorkOrderDetails?.CenterDetails?.Address ?? "N/A";
+            string partUsages = history.PartUsageDetails != null && history.PartUsageDetails.Count != 0
+                ? string.Join("<br>", history.PartUsageDetails.Select(pu =>
+                    $"{pu.QuantityUsed} x {(string.IsNullOrWhiteSpace(pu.PartName) ? ("Mã linh kiện: " + pu.PartId) : pu.PartName)} (Đơn giá: {pu.UnitPrice:N0} VNĐ, Tổng: {pu.TotalPrice:N0} VNĐ)"))
+                : "Không có linh kiện sử dụng";
+
+            return @"
+<!DOCTYPE html>
+<html lang='vi'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Thông báo lịch sử bảo dưỡng xe</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; background: #f4f7fa; padding: 20px; }
+        .email-container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1); overflow: hidden; }
+        .header { background: linear-gradient(135deg, #007bff, #00c4cc); padding: 30px; text-align: center; position: relative; }
+        .header img { width: 100px; height: auto; margin-bottom: 15px; }
+        .header h1 { color: #ffffff; font-size: 24px; font-weight: 600; margin-bottom: 10px; }
+        .header p { color: rgba(255, 255, 255, 0.9); font-size: 14px; }
+        .content { padding: 40px; text-align: center; }
+        .greeting { font-size: 18px; color: #1a2b49; margin-bottom: 20px; font-weight: 600; }
+        .message { font-size: 15px; color: #4a5b6c; margin-bottom: 30px; line-height: 1.7; }
+        .maintenance-details { margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px; text-align: left; }
+        .maintenance-details h3 { color: #1a2b49; font-size: 16px; margin-bottom: 10px; font-weight: 600; }
+        .maintenance-details p { color: #4a5b6c; font-size: 14px; margin-bottom: 8px; }
+        .security-notice { margin: 20px 0; padding: 15px; background: #ffebee; border-left: 4px solid #d32f2f; border-radius: 8px; text-align: left; }
+        .security-notice h3 { color: #b71c1c; font-size: 14px; margin-bottom: 8px; font-weight: 600; }
+        .security-notice p { color: #4a5b6c; font-size: 13px; }
+        .footer { background: #f8f9fa; padding: 30px; text-align: center; border-top: 1px solid #e0e4e8; }
+        .footer-brand { font-size: 18px; font-weight: 700; color: #007bff; margin-bottom: 10px; }
+        .footer p { color: #6c757d; font-size: 12px; margin-bottom: 8px; }
+        .footer a { color: #007bff; text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+        @media (max-width: 600px) {
+            .email-container { margin: 10px; border-radius: 8px; }
+            .header { padding: 20px; }
+            .content { padding: 20px; }
+            .header img { width: 80px; }
+            .header h1 { font-size: 20px; }
+            .maintenance-details { padding: 10px; }
+            .footer { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <div class='email-container'>
+        <div class='header'>
+            <img src='https://res.cloudinary.com/dphys6egj/image/upload/v1759812317/Pngtree_hipster_bike_electric_logo_design_4847419_wvci4k.jpg' alt='Logo EV Service Center'>
+            <h1>Thông báo lịch sử bảo dưỡng</h1>
+            <p>Thông tin lịch sử bảo dưỡng xe của bạn</p>
+        </div>
+        <div class='content'>
+            <div class='greeting'>Xin chào, " + userName + @"!</div>
+            <div class='message'>
+                Cảm ơn bạn đã sử dụng dịch vụ bảo dưỡng của chúng tôi. Dưới đây là thông tin về lịch sử bảo dưỡng xe của bạn.
+            </div>
+            <div class='maintenance-details'>
+                <h3>Thông tin bảo dưỡng</h3>
+                <p><strong>Mã lịch sử bảo dưỡng:</strong> " + history.HistoryId + @"</p>
+                <p><strong>Mã lệnh công việc:</strong> " + workOrderId + @"</p>
+                <p><strong>Xe:</strong> " + vehicleInfo + @"</p>
+                <p><strong>Dịch vụ:</strong> " + serviceNames + @"</p>
+                <p><strong>Ngày bảo dưỡng:</strong> " + maintenanceDate + @"</p>
+                <p><strong>Trung tâm bảo dưỡng:</strong> " + centerName + @"</p>
+                <p><strong>Địa chỉ:</strong> " + centerAddress + @"</p>
+                <p><strong>Chi phí:</strong> " + cost + @"</p>
+                <p><strong>Số km tại thời điểm bảo dưỡng:</strong> " + mileage + @"</p>
+                <p><strong>Mô tả:</strong> " + description + @"</p>
+                <p><strong>Ghi chú:</strong> " + notes + @"</p>
+                <p><strong>Linh kiện sử dụng:</strong> " + partUsages + @"</p>
+            </div>
+            <div class='security-notice'>
+                <h3>Thông báo bảo mật</h3>
+                <p>Nếu bạn không thực hiện bảo dưỡng này, vui lòng liên hệ với đội ngũ hỗ trợ của chúng tôi tại <a href='mailto:support@evservicecenter.me'>support@evservicecenter.me</a>.</p>
+            </div>
+        </div>
+        <div class='footer'>
+            <div class='footer-brand'>EV Service Center</div>
+            <p>Tra Vinh, Viet Nam</p>
+            <p>Email: <a href='mailto:support@evservicecenter.me'>support@evservicecenter.me</a> | Điện thoại: 0338302160</p>
+            <p>© 2025 EV Service Center. Tất cả quyền được bảo lưu.</p>
+        </div>
+    </div>
+</body>
+</html>";
+        }
     }
 }
