@@ -105,5 +105,30 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
             }
         }
+
+        [HttpGet("user/{userId}")]
+        [Authorize(Roles = "Customer,Staff")]
+        public async Task<IActionResult> GetConversationsByUser(int userId, [FromQuery] bool isCustomer = true)
+        {
+            try
+            {
+                var conversations = await _conversationDao.GetConversationsByUserIdAsync(userId, isCustomer);
+                var dtos = conversations.Select(c => new ConversationResponseDto
+                {
+                    ConversationId = c.ConversationId,
+                    CustomerId = c.CustomerId,
+                    StaffId = c.StaffId,
+                    Status = Enum.Parse<ConversationStatus>(c.Status),
+                    CreatedAt = c.CreatedAt,
+                    UpdatedAt = c.UpdatedAt
+                }).ToList();
+
+                return Ok(new ApiResponse<List<ConversationResponseDto>>(200, "Success", "Conversations retrieved successfully.", data: dtos));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
     }
 }

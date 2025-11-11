@@ -91,5 +91,14 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 throw new Exception("Failed to create conversation.", ex);
             }
         }
+
+        public async Task<List<Conversation>> GetConversationsByUserIdAsync(int userId, bool isCustomer)
+        {
+            var query = isCustomer ? _context.Conversations.Where(c => c.CustomerId == userId) : _context.Conversations.Where(c => c.StaffId == userId);
+            return await query
+                .Include(c => c.Chats)
+                .OrderByDescending(c => c.UpdatedAt)
+                .ToListAsync();
+        }
     }
 }
