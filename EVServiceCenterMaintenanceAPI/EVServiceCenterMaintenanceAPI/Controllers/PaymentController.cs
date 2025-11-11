@@ -262,6 +262,17 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         {
                             workOrder.Invoice.Status = "Paid";
                             _logger.LogInformation("Invoice {InvoiceId} is now fully paid", workOrder.Invoice.InvoiceId);
+
+                            // Update WorkOrder status to Completed when invoice is fully paid
+                            workOrder.Status = WorkOrderStatus.Completed.ToString();
+                            _logger.LogInformation("WorkOrder {WorkOrderId} status updated to Completed", workOrder.WorkOrderId);
+
+                            // Update Appointment status to Completed if exists
+                            if (workOrder.Appointment != null)
+                            {
+                                workOrder.Appointment.Status = AppointmentStatus.Completed.ToString();
+                                _logger.LogInformation("Appointment {AppointmentId} status updated to Completed", workOrder.Appointment.AppointmentId);
+                            }
                         }
                         else
                         {
@@ -270,7 +281,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                                 workOrder.Invoice.InvoiceId, totalPaid, workOrder.Invoice.TotalAmount);
                         }
 
-                        // Save all changes (payment + invoice status) in transaction
+                        // Save all changes (payment + invoice status + workorder status + appointment status) in transaction
                         await _context.SaveChangesAsync();
                         await transaction.CommitAsync();
 
