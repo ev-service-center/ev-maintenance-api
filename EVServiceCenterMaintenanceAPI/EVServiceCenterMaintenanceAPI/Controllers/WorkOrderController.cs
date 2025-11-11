@@ -4,6 +4,7 @@ using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Enums;
 using EVServiceCenterMaintenanceAPI.Helpers;
 using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Params;
 using EVServiceCenterMaintenanceAPI.Services;
 using EVServiceCenterMaintenanceAPI.Utils;
 using Microsoft.AspNetCore.Authorization;
@@ -21,15 +22,64 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         private readonly PayOSService _payOSService;
         private readonly ILogger<WorkOrderController> _logger;
         private readonly EmailService _emailService;
+        private readonly EmployeeDao _employeeDao;
 
-        public WorkOrderController(WorkOrderDao workOrderDao, EvserviceCenterDbContext context, PayOSService payOSService, ILogger<WorkOrderController> logger, EmailService emailService)
+        public WorkOrderController(WorkOrderDao workOrderDao, EvserviceCenterDbContext context, PayOSService payOSService, ILogger<WorkOrderController> logger, EmailService emailService, EmployeeDao employeeDao)
         {
             _workOrderDao = workOrderDao;
             _context = context;
             _payOSService = payOSService;
             _logger = logger;
             _emailService = emailService;
+            _employeeDao = employeeDao;
         }
+
+        #region Helper Methods
+
+        /// <summary>
+        /// Get current user info from claims
+        /// </summary>
+        private (string? UserIdClaim, string? UserRole) GetCurrentUserInfo()
+        {
+            var userIdClaim = User.FindFirst("UserId")?.Value;
+            var userRole = User.FindFirstValue(ClaimTypes.Role);
+            return (userIdClaim, userRole);
+        }
+
+        /// <summary>
+        /// Validate Staff/Technician can only access work orders at their center
+        /// </summary>
+        private async Task<IActionResult?> ValidateCenterAccessAsync(int workOrderCenterId, string? userRole, int currentUserId)
+        {
+            if (userRole != UserRole.Staff.ToString() && userRole != UserRole.Technician.ToString())
+                return null; // Not Staff/Technician, no restriction
+
+            var currentEmployee = await _employeeDao.GetEmployeeByIdAsync(currentUserId);
+            if (currentEmployee == null)
+                return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                    $"{userRole} user does not have an associated employee record."));
+
+            if (workOrderCenterId != currentEmployee.CenterId)
+                return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
+                    $"{userRole} can only access work orders from their own service center (Center ID: {currentEmployee.CenterId})."));
+
+            return null;
+        }
+
+        /// <summary>
+        /// Get current employee for center validation
+        /// </summary>
+        private async Task<(Employee? Employee, IActionResult? Error)> GetCurrentEmployeeAsync(int currentUserId, string? userRole)
+        {
+            var currentEmployee = await _employeeDao.GetEmployeeByIdAsync(currentUserId);
+            if (currentEmployee == null)
+                return (null, BadRequest(new ApiResponse<object>(400, "BadRequest",
+                    $"{userRole} user does not have an associated employee record.")));
+
+            return (currentEmployee, null);
+        }
+
+        #endregion
 
         [HttpPost]
         [Authorize(Roles = "Staff,Admin")]
@@ -37,6 +87,18 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             try
             {
+                // Get current user info for authorization
+                var (userIdClaim, userRole) = GetCurrentUserInfo();
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                // Center restriction: Staff chỉ tạo work order tại center của họ
+                if (userRole == UserRole.Staff.ToString())
+                {
+                    var centerAccessError = await ValidateCenterAccessAsync(dto.CenterId, userRole, currentUserId);
+                    if (centerAccessError != null) return centerAccessError;
+                }
+
                 var workOrder = new WorkOrder
                 {
                     CenterId = dto.CenterId,
@@ -105,6 +167,13 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
                             "You can only view work orders with services assigned to you."));
                     }
+                }
+
+                // Center restriction: Staff chỉ xem work order tại center của họ
+                if (userRole == UserRole.Staff.ToString())
+                {
+                    var centerAccessError = await ValidateCenterAccessAsync(workOrder.CenterId, userRole, userId);
+                    if (centerAccessError != null) return centerAccessError;
                 }
                 var dto = new WorkOrderResponseDto
                 {
@@ -422,6 +491,244 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, new ApiResponse<object>(500, "InternalServerError", $"An error occurred while checking payment status: {ex.Message}"));
+            }
+        }
+
+        [HttpGet]
+        [Authorize(Roles = "Staff,Technician,Admin")]
+        public async Task<IActionResult> GetAllWorkOrders([FromQuery] WorkOrderQueryParams queryParams)
+        {
+            try
+            {
+                // Center restriction: Staff/Technician chỉ xem work orders tại center của họ
+                var (userIdClaim, userRole) = GetCurrentUserInfo();
+                if (userRole == UserRole.Staff.ToString() || userRole == UserRole.Technician.ToString())
+                {
+                    if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                        return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                    var (employee, error) = await GetCurrentEmployeeAsync(currentUserId, userRole);
+                    if (error != null) return error;
+
+                    // Force filter by staff/technician's center
+                    queryParams.CenterId = employee!.CenterId;
+                }
+
+                var (workOrders, total) = await _workOrderDao.GetAllWorkOrdersAsync(queryParams);
+                var dtos = workOrders.Select(wo => new WorkOrderResponseDto
+                {
+                    WorkOrderId = wo.WorkOrderId,
+                    CenterId = wo.CenterId,
+                    CustomerId = wo.CustomerId,
+                    VehicleId = wo.VehicleId,
+                    CreatedByStaffId = wo.CreatedByStaffId,
+                    AppointmentId = wo.AppointmentId,
+                    Status = Enum.Parse<WorkOrderStatus>(wo.Status),
+                    CheckInAt = wo.CheckInAt,
+                    CheckOutAt = wo.CheckOutAt,
+                    OdometerKm = wo.OdometerKm,
+                    Notes = wo.Notes,
+                    CenterDetails = wo.Center == null ? null : new ServiceCenterResponseDto
+                    {
+                        CenterId = wo.Center.CenterId,
+                        CenterName = wo.Center.CenterName,
+                        Phone = wo.Center.Phone,
+                        Email = wo.Center.Email,
+                        Status = Enum.Parse<ServiceCenterStatus>(wo.Center.Status),
+                        CreatedAt = wo.Center.CreatedAt,
+                        UpdatedAt = wo.Center.UpdatedAt
+                    },
+                    CustomerDetails = wo.Customer == null ? null : new UserResponseDto
+                    {
+                        UserId = wo.Customer.UserId,
+                        FullName = wo.Customer.FullName,
+                        Email = wo.Customer.Email,
+                        Phone = wo.Customer.Phone,
+                        Role = Enum.Parse<UserRole>(wo.Customer.Role),
+                        CreatedAt = wo.Customer.CreatedAt,
+                        UpdatedAt = wo.Customer.UpdatedAt
+                    },
+                    VehicleDetails = wo.Vehicle == null ? null : new VehicleResponeDto
+                    {
+                        VehicleId = wo.Vehicle.VehicleId,
+                        CustomerId = wo.Vehicle.CustomerId,
+                        Model = wo.Vehicle.Model,
+                        VIN = wo.Vehicle.Vin,
+                        ManufactureYear = wo.Vehicle.ManufactureYear,
+                        CurrentMileage = wo.Vehicle.CurrentMileage ?? 0,
+                        LastMaintenanceDate = wo.Vehicle.LastMaintenanceDate,
+                        Color = wo.Vehicle.Color,
+                        Plate = wo.Vehicle.Plate,
+                        CreatedAt = wo.Vehicle.CreatedAt,
+                        UpdatedAt = wo.Vehicle.UpdatedAt
+                    },
+                    AppointmentServices = wo.AppointmentServices?.Select(aps => new AppointmentServiceResponseDto
+                    {
+                        AppointmentServiceId = aps.AppointmentServiceId,
+                        WorkOrderId = aps.WorkOrderId,
+                        ServiceId = aps.ServiceId,
+                        Price = aps.Price
+                    }).ToList(),
+                    AppointmentDetails = wo.Appointment == null ? null : new AppointmentResponseDto
+                    {
+                        AppointmentId = wo.Appointment.AppointmentId,
+                        CustomerId = wo.Appointment.CustomerId,
+                        VehicleId = wo.Appointment.VehicleId,
+                        CenterId = wo.Appointment.CenterId,
+                        SlotId = wo.Appointment.SlotId,
+                        AppointmentDate = wo.Appointment.AppointmentDate,
+                        Status = Enum.Parse<AppointmentStatus>(wo.Appointment.Status),
+                        Notes = wo.Appointment.Notes,
+                        AssignedTechnicianId = wo.Appointment.AssignedTechnicianId,
+                        Amount = wo.Appointment.Amount,
+                        CreatedAt = wo.Appointment.CreatedAt,
+                        UpdatedAt = wo.Appointment.UpdatedAt
+                    },
+                    ServiceDetails = wo.AppointmentServices?.Select(aps => new ServiceResponseDto
+                    {
+                        ServiceId = aps.Service.ServiceId,
+                        ServiceName = aps.Service.ServiceName,
+                        Description = aps.Service.Description,
+                        BasePrice = aps.Service.BasePrice,
+                        EstimatedTime = aps.Service.EstimatedTime,
+                        Status = Enum.Parse<ServiceStatus>(aps.Service.Status),
+                        ReminderIntervalDays = aps.Service.ReminderIntervalDays ?? 0,
+                        ReminderMileage = aps.Service.ReminderMileage ?? 0,
+                        Notes = aps.Service.Notes,
+                        CreatedAt = aps.Service.CreatedAt,
+                        UpdatedAt = aps.Service.UpdatedAt
+                    }).ToList()
+                }).ToList();
+
+                var responseData = new { workOrders = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
+                return Ok(new ApiResponse<object>(200, "Success", "WorkOrders retrieved successfully.", data: responseData));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpGet("customer/{customerId}")]
+        [Authorize(Roles = "Customer,Staff,Admin")]
+        public async Task<IActionResult> GetWorkOrdersByCustomer(int customerId)
+        {
+            try
+            {
+                // Get current user info
+                var (userIdClaim, userRole) = GetCurrentUserInfo();
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                // Authorization check: Customer chỉ xem work orders của mình
+                if (userRole == UserRole.Customer.ToString() && customerId != currentUserId)
+                {
+                    return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
+                        "You can only view your own work orders."));
+                }
+
+                var workOrders = await _workOrderDao.GetWorkOrdersByCustomerIdAsync(customerId);
+
+                // Center restriction: Staff chỉ xem work orders của customer tại center của họ
+                if (userRole == UserRole.Staff.ToString())
+                {
+                    var (employee, error) = await GetCurrentEmployeeAsync(currentUserId, userRole);
+                    if (error != null) return error;
+
+                    // Filter work orders by staff's center
+                    workOrders = workOrders.Where(wo => wo.CenterId == employee!.CenterId).ToList();
+                }
+
+                var dtos = workOrders.Select(wo => new WorkOrderResponseDto
+                {
+                    WorkOrderId = wo.WorkOrderId,
+                    CenterId = wo.CenterId,
+                    CustomerId = wo.CustomerId,
+                    VehicleId = wo.VehicleId,
+                    CreatedByStaffId = wo.CreatedByStaffId,
+                    AppointmentId = wo.AppointmentId,
+                    Status = Enum.Parse<WorkOrderStatus>(wo.Status),
+                    CheckInAt = wo.CheckInAt,
+                    CheckOutAt = wo.CheckOutAt,
+                    OdometerKm = wo.OdometerKm,
+                    Notes = wo.Notes,
+                    CenterDetails = wo.Center == null ? null : new ServiceCenterResponseDto
+                    {
+                        CenterId = wo.Center.CenterId,
+                        CenterName = wo.Center.CenterName,
+                        Phone = wo.Center.Phone,
+                        Email = wo.Center.Email,
+                        Status = Enum.Parse<ServiceCenterStatus>(wo.Center.Status),
+                        CreatedAt = wo.Center.CreatedAt,
+                        UpdatedAt = wo.Center.UpdatedAt
+                    },
+                    CustomerDetails = wo.Customer == null ? null : new UserResponseDto
+                    {
+                        UserId = wo.Customer.UserId,
+                        FullName = wo.Customer.FullName,
+                        Email = wo.Customer.Email,
+                        Phone = wo.Customer.Phone,
+                        Role = Enum.Parse<UserRole>(wo.Customer.Role),
+                        CreatedAt = wo.Customer.CreatedAt,
+                        UpdatedAt = wo.Customer.UpdatedAt
+                    },
+                    VehicleDetails = wo.Vehicle == null ? null : new VehicleResponeDto
+                    {
+                        VehicleId = wo.Vehicle.VehicleId,
+                        CustomerId = wo.Vehicle.CustomerId,
+                        Model = wo.Vehicle.Model,
+                        VIN = wo.Vehicle.Vin,
+                        ManufactureYear = wo.Vehicle.ManufactureYear,
+                        CurrentMileage = wo.Vehicle.CurrentMileage ?? 0,
+                        LastMaintenanceDate = wo.Vehicle.LastMaintenanceDate,
+                        Color = wo.Vehicle.Color,
+                        Plate = wo.Vehicle.Plate,
+                        CreatedAt = wo.Vehicle.CreatedAt,
+                        UpdatedAt = wo.Vehicle.UpdatedAt
+                    },
+                    AppointmentServices = wo.AppointmentServices?.Select(aps => new AppointmentServiceResponseDto
+                    {
+                        AppointmentServiceId = aps.AppointmentServiceId,
+                        WorkOrderId = aps.WorkOrderId,
+                        ServiceId = aps.ServiceId,
+                        Price = aps.Price
+                    }).ToList(),
+                    AppointmentDetails = wo.Appointment == null ? null : new AppointmentResponseDto
+                    {
+                        AppointmentId = wo.Appointment.AppointmentId,
+                        CustomerId = wo.Appointment.CustomerId,
+                        VehicleId = wo.Appointment.VehicleId,
+                        CenterId = wo.Appointment.CenterId,
+                        SlotId = wo.Appointment.SlotId,
+                        AppointmentDate = wo.Appointment.AppointmentDate,
+                        Status = Enum.Parse<AppointmentStatus>(wo.Appointment.Status),
+                        Notes = wo.Appointment.Notes,
+                        AssignedTechnicianId = wo.Appointment.AssignedTechnicianId,
+                        Amount = wo.Appointment.Amount,
+                        CreatedAt = wo.Appointment.CreatedAt,
+                        UpdatedAt = wo.Appointment.UpdatedAt
+                    },
+                    ServiceDetails = wo.AppointmentServices?.Select(aps => new ServiceResponseDto
+                    {
+                        ServiceId = aps.Service.ServiceId,
+                        ServiceName = aps.Service.ServiceName,
+                        Description = aps.Service.Description,
+                        BasePrice = aps.Service.BasePrice,
+                        EstimatedTime = aps.Service.EstimatedTime,
+                        Status = Enum.Parse<ServiceStatus>(aps.Service.Status),
+                        ReminderIntervalDays = aps.Service.ReminderIntervalDays ?? 0,
+                        ReminderMileage = aps.Service.ReminderMileage ?? 0,
+                        Notes = aps.Service.Notes,
+                        CreatedAt = aps.Service.CreatedAt,
+                        UpdatedAt = aps.Service.UpdatedAt
+                    }).ToList()
+                }).ToList();
+
+                return Ok(new ApiResponse<List<WorkOrderResponseDto>>(200, "Success", "WorkOrders retrieved successfully.", data: dtos));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
             }
         }
     }
