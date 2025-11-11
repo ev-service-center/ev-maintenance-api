@@ -72,5 +72,24 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
             return (conversations, total);
         }
+
+        public async Task<Conversation> CreateConversationAsync(Conversation conversation)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                conversation.CreatedAt = DateTime.UtcNow;
+                conversation.UpdatedAt = DateTime.UtcNow;
+                _context.Conversations.Add(conversation);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return conversation;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception("Failed to create conversation.", ex);
+            }
+        }
     }
 }

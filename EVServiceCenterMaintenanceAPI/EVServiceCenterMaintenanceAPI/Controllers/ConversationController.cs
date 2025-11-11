@@ -1,6 +1,7 @@
 ﻿using EVServiceCenterMaintenanceAPI.DAO;
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Enums;
+using EVServiceCenterMaintenanceAPI.Models;
 using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -66,6 +67,38 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 
                 var responseData = new { conversations = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
                 return Ok(new ApiResponse<object>(200, "Success", "Conversations retrieved successfully.", data: responseData));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "Customer,Staff")]
+        public async Task<IActionResult> CreateConversation([FromBody] ConversationCreateRequestDto dto)
+        {
+            try
+            {
+                var conversation = new Conversation
+                {
+                    CustomerId = dto.CustomerId,
+                    StaffId = dto.StaffId,
+                    Status = Enums.ConversationStatus.Active.ToString()
+                };
+
+                var createdConversation = await _conversationDao.CreateConversationAsync(conversation);
+                var createdDto = new ConversationResponseDto
+                {
+                    ConversationId = createdConversation.ConversationId,
+                    CustomerId = createdConversation.CustomerId,
+                    StaffId = createdConversation.StaffId,
+                    Status = Enum.Parse<ConversationStatus>(createdConversation.Status),
+                    CreatedAt = createdConversation.CreatedAt,
+                    UpdatedAt = createdConversation.UpdatedAt
+                };
+
+                return CreatedAtAction(nameof(GetConversation), new { id = createdConversation.ConversationId }, new ApiResponse<ConversationResponseDto>(201, "Created", "Conversation created successfully.", data: createdDto));
             }
             catch (Exception ex)
             {

@@ -1,4 +1,5 @@
 ﻿using EVServiceCenterMaintenanceAPI.Enums;
+using System.ComponentModel.DataAnnotations;
 
 namespace EVServiceCenterMaintenanceAPI.DTO
 {
@@ -10,5 +11,11 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         public ConversationStatus Status { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+    }
+
+    public class ConversationCreateRequestDto
+    {
+        [Required] public int CustomerId { get; set; }
+        [Required] public int StaffId { get; set; }
     }
 }
