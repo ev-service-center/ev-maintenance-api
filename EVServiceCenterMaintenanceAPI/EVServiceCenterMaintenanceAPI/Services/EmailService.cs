@@ -218,6 +218,20 @@ namespace EVServiceCenterMaintenanceAPI.Services
             }
         }
 
+        public async Task<bool> SendMaintenanceHistoryCreatedEmailAsync(MaintenanceHistoryResponseDto history, string toEmail)
+        {
+            try
+            {
+                var message = EmailTemplate.GenerateMaintenanceHistoryEmailTemplate(history);
+                await SendEmailAsync(toEmail, "Thông báo lịch sử bảo dưỡng xe - 3DO Corp", message, true);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
         private async Task SendEmailViaSendGridApiAsync(string toEmail, string subject, string body, bool isBodyHtml)
         {
             var apiKey = _emailSetting.Password; // SendGrid API Key
