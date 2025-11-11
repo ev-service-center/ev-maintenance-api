@@ -153,17 +153,22 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         }
 
         [HttpGet("customer/{customerId}")]
-        [Authorize(Roles = "Customer")]
+        [Authorize(Roles = "Customer,Staff,Admin")]
         public async Task<IActionResult> GetVehiclesByCustomer(int customerId)
         {
             try
             {
                 // Get current user info
                 var userId = JwtHelper.GetUserIdFromHttpContext(HttpContext);
+                var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
 
                 // Security: Customer can only view their own vehicles
-                if (customerId != userId)
-                    return StatusCode(403, new ApiResponse<object>(403, "Forbidden", "You can only view your own vehicles."));
+                if (userRole == UserRole.Customer.ToString())
+                {
+                    if (customerId != userId)
+                        return StatusCode(403, new ApiResponse<object>(403, "Forbidden", "You can only view your own vehicles."));
+                }
+                // Staff and Admin can view vehicles for any customer
 
                 var vehicles = await _vehicleDao.GetVehiclesByCustomerIdAsync(customerId);
                 var dtos = vehicles.Select(v => new VehicleResponeDto

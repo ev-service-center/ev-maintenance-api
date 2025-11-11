@@ -1,9 +1,14 @@
 ﻿using EVServiceCenterMaintenanceAPI.DAO;
 using EVServiceCenterMaintenanceAPI.DTO;
+using EVServiceCenterMaintenanceAPI.Enums;
 using EVServiceCenterMaintenanceAPI.Models;
 using EVServiceCenterMaintenanceAPI.Params;
+using EVServiceCenterMaintenanceAPI.Services;
+using EVServiceCenterMaintenanceAPI.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace EVServiceCenterMaintenanceAPI.Controllers
 {
@@ -12,43 +17,277 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
     public class MaintenanceHistoryController : ControllerBase
     {
         private readonly MaintenanceHistoryDao _maintenanceHistoryDao;
+        private readonly EvserviceCenterDbContext _context;
+        private readonly EmailService _emailService;
+        private readonly EmployeeDao _employeeDao;
 
-        public MaintenanceHistoryController(MaintenanceHistoryDao maintenanceHistoryDao)
+        public MaintenanceHistoryController(MaintenanceHistoryDao maintenanceHistoryDao, EvserviceCenterDbContext context, EmailService emailService, EmployeeDao employeeDao)
         {
             _maintenanceHistoryDao = maintenanceHistoryDao;
+            _context = context;
+            _emailService = emailService;
+            _employeeDao = employeeDao;
         }
 
+        #region Helper Methods
+
+        /// <summary>
+        /// Get current user info from claims
+        /// </summary>
+        private (string? UserIdClaim, string? UserRole) GetCurrentUserInfo()
+        {
+            var userIdClaim = User.FindFirst("UserId")?.Value;
+            var userRole = User.FindFirstValue(ClaimTypes.Role);
+            return (userIdClaim, userRole);
+        }
+
+        /// <summary>
+        /// Validate foreign key relationships for maintenance history creation
+        /// </summary>
+        private async Task<IActionResult?> ValidateMaintenanceHistoryDataAsync(MaintenanceHistoryCreateRequestDto dto)
+        {
+            // 1. Validate Vehicle exists and is active
+            var vehicle = await _context.Vehicles.FindAsync(dto.VehicleId);
+            if (vehicle == null)
+                return NotFound(new ApiResponse<object>(404, "NotFound", "Vehicle not found."));
+
+            if (vehicle.Status != VehicleStatus.Active.ToString())
+                return BadRequest(new ApiResponse<object>(400, "BadRequest", "Vehicle is not active."));
+
+            // 2. Validate Service exists and is active
+            var service = await _context.Services.FindAsync(dto.ServiceId);
+            if (service == null)
+                return NotFound(new ApiResponse<object>(404, "NotFound", "Service not found."));
+
+            if (service.Status != ServiceStatus.Active.ToString())
+                return BadRequest(new ApiResponse<object>(400, "BadRequest", "Service is not active."));
+
+            // 3. Validate WorkOrder exists and belongs to the correct Vehicle
+            var workOrder = await _context.WorkOrders
+                .Include(wo => wo.Center)
+                .Include(wo => wo.AppointmentServices)
+                .FirstOrDefaultAsync(wo => wo.WorkOrderId == dto.WorkOrderId);
+
+            if (workOrder == null)
+                return NotFound(new ApiResponse<object>(404, "NotFound", "Work order not found."));
+
+            // CRITICAL: Check WorkOrder.VehicleId matches dto.VehicleId
+            if (workOrder.VehicleId != dto.VehicleId)
+                return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                    "Work order does not belong to the specified vehicle."));
+
+            // CRITICAL: Check Service exists in WorkOrder's AppointmentServices
+            var serviceExistsInWorkOrder = workOrder.AppointmentServices
+                .Any(aps => aps.ServiceId == dto.ServiceId);
+
+            if (!serviceExistsInWorkOrder)
+                return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                    "Service is not included in the specified work order."));
+
+            // 4. Validate Mileage logic
+            if (dto.MileageAtMaintenance.HasValue)
+            {
+                if (vehicle.CurrentMileage.HasValue &&
+                    dto.MileageAtMaintenance.Value < vehicle.CurrentMileage.Value)
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        $"Mileage at maintenance ({dto.MileageAtMaintenance.Value}) cannot be less than vehicle's current mileage ({vehicle.CurrentMileage.Value})."));
+            }
+
+            return null; // All validations passed
+        }
+
+
+        /// <summary>
+        /// Get current employee for center validation
+        /// </summary>
+        private async Task<(Employee? Employee, IActionResult? Error)> GetCurrentEmployeeAsync(int currentUserId, string? userRole)
+        {
+            var currentEmployee = await _employeeDao.GetEmployeeByIdAsync(currentUserId);
+            if (currentEmployee == null)
+                return (null, BadRequest(new ApiResponse<object>(400, "BadRequest",
+                    $"{userRole} user does not have an associated employee record.")));
+
+            return (currentEmployee, null);
+        }
+
+        #endregion
+
         [HttpPost]
-        [Authorize(Roles = "Technician,Admin")]
+        [Authorize(Roles = "Staff,Technician,Admin")]
         public async Task<IActionResult> CreateMaintenanceHistory([FromBody] MaintenanceHistoryCreateRequestDto dto)
         {
             try
             {
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState
+                        .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                        .SelectMany(kvp => kvp.Value!.Errors.Select(e => $"{kvp.Key}: {e.ErrorMessage}"))
+                        .ToList();
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", string.Join("; ", errors)));
+                }
+
+                // Validate MaintenanceDate
+                if (dto.MaintenanceDate > DateTime.UtcNow)
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        "Maintenance date cannot be in the future."));
+
+                if (dto.MaintenanceDate < DateTime.UtcNow.AddYears(-5))
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        "Maintenance date cannot be more than 5 years in the past."));
+
+                // Center validation for Staff/Technician
+                var (userIdClaim, userRole) = GetCurrentUserInfo();
+                if (userRole == UserRole.Staff.ToString() || userRole == UserRole.Technician.ToString())
+                {
+                    if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                        return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                    var (employee, employeeError) = await GetCurrentEmployeeAsync(currentUserId, userRole);
+                    if (employeeError != null) return employeeError;
+
+                    // Check if WorkOrder belongs to employee's center
+                    var workOrder = await _context.WorkOrders
+                        .Where(wo => wo.WorkOrderId == dto.WorkOrderId)
+                        .Select(wo => new { wo.WorkOrderId, wo.CenterId })
+                        .FirstOrDefaultAsync();
+
+                    if (workOrder != null && workOrder.CenterId != employee!.CenterId)
+                        return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
+                            $"{userRole} can only create maintenance histories for work orders at their center (Center ID: {employee.CenterId})."));
+
+                    // Additional check for Technician: Must be assigned to at least one service in the WorkOrder
+                    if (userRole == UserRole.Technician.ToString())
+                    {
+                        var isAssignedToWorkOrder = await _context.AppointmentServices
+                            .AnyAsync(aps => aps.WorkOrderId == dto.WorkOrderId &&
+                                            aps.AssignedTechnicianId == currentUserId);
+
+                        if (!isAssignedToWorkOrder)
+                            return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
+                                "Technician can only create maintenance histories for work orders they are assigned to."));
+                    }
+                }
+
+                // Validate foreign key relationships (Vehicle, Service, WorkOrder consistency)
+                var validationError = await ValidateMaintenanceHistoryDataAsync(dto);
+                if (validationError != null)
+                    return validationError;
+
+                // Check for duplicate maintenance history
+                var recentHistory = await _context.MaintenanceHistories
+                    .Where(h => h.VehicleId == dto.VehicleId &&
+                                h.ServiceId == dto.ServiceId &&
+                                h.MaintenanceDate >= dto.MaintenanceDate.AddHours(-24) &&
+                                h.MaintenanceDate <= dto.MaintenanceDate.AddHours(24))
+                    .FirstOrDefaultAsync();
+
+                if (recentHistory != null)
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        "A similar maintenance history already exists within 24 hours."));
                 var history = new MaintenanceHistory
                 {
                     VehicleId = dto.VehicleId,
+                    WorkOrderId = dto.WorkOrderId,
+                    ServiceId = dto.ServiceId,
                     MaintenanceDate = dto.MaintenanceDate,
                     Description = dto.Description,
                     Notes = dto.Notes,
                     Cost = dto.Cost,
-                    MileageAtMaintenance = dto.MileageAtMaintenance
+                    MileageAtMaintenance = dto.MileageAtMaintenance,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
                 };
-
-                var createdHistory = await _maintenanceHistoryDao.CreateMaintenanceHistoryAsync(history);
+                await _maintenanceHistoryDao.CreateMaintenanceHistoryAsync(history);
+                var createdHistory = await _maintenanceHistoryDao.GetMaintenanceHistoryByIdAsync(history.HistoryId);
                 var createdDto = new MaintenanceHistoryResponseDto
                 {
                     HistoryId = createdHistory.HistoryId,
                     VehicleId = createdHistory.VehicleId,
+                    WorkOrderId = createdHistory.WorkOrderId,
                     MaintenanceDate = createdHistory.MaintenanceDate,
                     Description = createdHistory.Description,
                     Notes = createdHistory.Notes,
                     Cost = createdHistory.Cost,
                     MileageAtMaintenance = createdHistory.MileageAtMaintenance,
                     CreatedAt = createdHistory.CreatedAt,
-                    UpdatedAt = createdHistory.UpdatedAt
-                };
+                    UpdatedAt = createdHistory.UpdatedAt,
+                    ServiceDetails = createdHistory.Service == null ? null : new ServiceResponseDto
+                    {
+                        ServiceId = createdHistory.Service.ServiceId,
+                        ServiceName = createdHistory.Service.ServiceName,
+                        Description = createdHistory.Service.Description,
+                        BasePrice = createdHistory.Service.BasePrice,
+                        EstimatedTime = createdHistory.Service.EstimatedTime,
+                        Status = Enum.Parse<ServiceStatus>(createdHistory.Service.Status),
+                        ReminderIntervalDays = createdHistory.Service.ReminderIntervalDays ?? 0,
+                        ReminderMileage = createdHistory.Service.ReminderMileage ?? 0,
+                        Notes = createdHistory.Service.Notes,
+                        CreatedAt = createdHistory.Service.CreatedAt,
+                        UpdatedAt = createdHistory.Service.UpdatedAt
+                    },
+                    VehicleDetails = createdHistory.Vehicle == null ? null : new VehicleResponeDto
+                    {
+                        VehicleId = createdHistory.Vehicle.VehicleId,
+                        CustomerId = createdHistory.Vehicle.CustomerId,
+                        Model = createdHistory.Vehicle.Model,
+                        VIN = createdHistory.Vehicle.Vin,
+                        ManufactureYear = createdHistory.Vehicle.ManufactureYear,
+                        CurrentMileage = createdHistory.Vehicle.CurrentMileage ?? 0,
+                        LastMaintenanceDate = createdHistory.Vehicle.LastMaintenanceDate,
+                        Color = createdHistory.Vehicle.Color,
+                        Plate = createdHistory.Vehicle.Plate,
+                        CreatedAt = createdHistory.Vehicle.CreatedAt,
+                        UpdatedAt = createdHistory.Vehicle.UpdatedAt
+                    },
+                    WorkOrderDetails = createdHistory.WorkOrder == null ? null : new WorkOrderResponseDto
+                    {
+                        WorkOrderId = createdHistory.WorkOrder.WorkOrderId,
+                        CenterId = createdHistory.WorkOrder.CenterId,
+                        CustomerId = createdHistory.WorkOrder.CustomerId,
+                        VehicleId = createdHistory.WorkOrder.VehicleId,
+                        CreatedByStaffId = createdHistory.WorkOrder.CreatedByStaffId,
+                        AppointmentId = createdHistory.WorkOrder.AppointmentId,
+                        Status = Enum.Parse<WorkOrderStatus>(createdHistory.WorkOrder.Status),
+                        CheckInAt = createdHistory.WorkOrder.CheckInAt,
+                        CheckOutAt = createdHistory.WorkOrder.CheckOutAt,
+                        OdometerKm = createdHistory.WorkOrder.OdometerKm,
+                        Notes = createdHistory.WorkOrder.Notes
+                    },
+                    PartUsageDetails = createdHistory.PartUsages?.Select(pu =>
+                    {
+                        var totalCost = pu.UnitCostPrice * pu.QuantityUsed;
+                        var totalPrice = pu.UnitPrice * pu.QuantityUsed;
+                        var profit = totalPrice - totalCost;
+                        var profitMargin = totalPrice > 0 ? Math.Round(profit / totalPrice * 100, 2) : 0;
 
-                return CreatedAtAction(nameof(GetMaintenanceHistory), new { id = createdHistory.HistoryId }, new ApiResponse<MaintenanceHistoryResponseDto>(201, "Created", "Maintenance history created successfully.", data: createdDto));
+                        return new PartUsageResponseDto
+                        {
+                            UsageId = pu.UsageId,
+                            HistoryId = pu.HistoryId,
+                            PartId = pu.PartId,
+                            QuantityUsed = pu.QuantityUsed,
+                            UnitCostPrice = pu.UnitCostPrice,
+                            UnitPrice = pu.UnitPrice,
+                            PartName = pu.Part.PartName,
+                            PartDescription = pu.Part.Description,
+                            TotalCost = totalCost,
+                            TotalPrice = totalPrice,
+                            Profit = profit,
+                            ProfitMargin = profitMargin,
+                            WorkOrderId = createdHistory.WorkOrderId,
+                            VehicleId = createdHistory.VehicleId
+                        };
+                    }).ToList()
+                };
+                // Send email notification
+                var customerEmail = createdHistory.WorkOrder?.Customer?.Email;
+                if (!string.IsNullOrEmpty(customerEmail))
+                {
+                    TaskHelper.FireAndForget(createdDto, customerEmail, _emailService.SendMaintenanceHistoryCreatedEmailAsync);
+                }
+                return CreatedAtAction(nameof(GetMaintenanceHistory), new { id = createdHistory.HistoryId },
+                    new ApiResponse<MaintenanceHistoryResponseDto>(201, "Created", "Maintenance history created successfully.", data: createdDto));
             }
             catch (Exception ex)
             {
@@ -93,6 +332,47 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             try
             {
+                // Center restriction: Staff chỉ xem maintenance histories tại center của họ
+                var (userIdClaim, userRole) = GetCurrentUserInfo();
+                if (userRole == UserRole.Staff.ToString())
+                {
+                    if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                        return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                    var (employee, error) = await GetCurrentEmployeeAsync(currentUserId, userRole);
+                    if (error != null) return error;
+
+                    // Force filter by staff's center - we need to filter by work orders at their center
+                    // Get work order IDs at staff's center
+                    var workOrderIdsAtCenter = await _context.WorkOrders
+                        .Where(wo => wo.CenterId == employee!.CenterId)
+                        .Select(wo => wo.WorkOrderId)
+                        .ToListAsync();
+
+                    var (allHistories, allTotal) = await _maintenanceHistoryDao.GetAllMaintenanceHistoriesAsync(queryParams);
+
+                    // Filter histories by work orders at staff's center
+                    var filteredHistories = allHistories
+                        .Where(h => h.PartUsages.Any(pu => pu.Part?.CenterId == employee!.CenterId))
+                        .ToList();
+
+                    var staffDtos = filteredHistories.Select(h => new MaintenanceHistoryResponseDto
+                    {
+                        HistoryId = h.HistoryId,
+                        VehicleId = h.VehicleId,
+                        MaintenanceDate = h.MaintenanceDate,
+                        Description = h.Description,
+                        Notes = h.Notes,
+                        Cost = h.Cost,
+                        MileageAtMaintenance = h.MileageAtMaintenance,
+                        CreatedAt = h.CreatedAt,
+                        UpdatedAt = h.UpdatedAt
+                    }).ToList();
+
+                    var staffResponseData = new { histories = staffDtos, total = filteredHistories.Count, page = queryParams.Page, pageSize = queryParams.PageSize };
+                    return Ok(new ApiResponse<object>(200, "Success", "Maintenance histories retrieved successfully.", data: staffResponseData));
+                }
+
                 var (histories, total) = await _maintenanceHistoryDao.GetAllMaintenanceHistoriesAsync(queryParams);
 
                 var dtos = histories.Select(h => new MaintenanceHistoryResponseDto

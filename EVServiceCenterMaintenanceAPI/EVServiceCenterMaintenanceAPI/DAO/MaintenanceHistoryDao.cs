@@ -36,7 +36,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
         {
             return await _context.MaintenanceHistories
                 .Include(h => h.PartUsages)
-                .ThenInclude(pu => pu.Part)
+                    .ThenInclude(pu => pu.Part)
                 .FirstOrDefaultAsync(h => h.HistoryId == historyId);
         }
 

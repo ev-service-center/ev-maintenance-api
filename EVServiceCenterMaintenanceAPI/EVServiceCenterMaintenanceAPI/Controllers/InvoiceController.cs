@@ -17,13 +17,62 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         private readonly InvoiceDao _invoiceDao;
         private readonly EvserviceCenterDbContext _context;
         private readonly ILogger<InvoiceController> _logger;
+        private readonly EmployeeDao _employeeDao;
 
-        public InvoiceController(InvoiceDao invoiceDao, EvserviceCenterDbContext context, ILogger<InvoiceController> logger)
+        public InvoiceController(InvoiceDao invoiceDao, EvserviceCenterDbContext context, ILogger<InvoiceController> logger, EmployeeDao employeeDao)
         {
             _invoiceDao = invoiceDao;
             _context = context;
             _logger = logger;
+            _employeeDao = employeeDao;
         }
+
+        #region Helper Methods
+
+        /// <summary>
+        /// Get current user info from claims
+        /// </summary>
+        private (string? UserIdClaim, string? UserRole) GetCurrentUserInfo()
+        {
+            var userIdClaim = User.FindFirst("UserId")?.Value;
+            var userRole = User.FindFirstValue(ClaimTypes.Role);
+            return (userIdClaim, userRole);
+        }
+
+        /// <summary>
+        /// Validate Staff can only access invoices at their center
+        /// </summary>
+        private async Task<IActionResult?> ValidateCenterAccessAsync(int invoiceCenterId, string? userRole, int currentUserId)
+        {
+            if (userRole != UserRole.Staff.ToString())
+                return null; // Not Staff, no restriction
+
+            var currentEmployee = await _employeeDao.GetEmployeeByIdAsync(currentUserId);
+            if (currentEmployee == null)
+                return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                    $"{userRole} user does not have an associated employee record."));
+
+            if (invoiceCenterId != currentEmployee.CenterId)
+                return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
+                    $"{userRole} can only access invoices from their own service center (Center ID: {currentEmployee.CenterId})."));
+
+            return null;
+        }
+
+        /// <summary>
+        /// Get current employee for center validation
+        /// </summary>
+        private async Task<(Employee? Employee, IActionResult? Error)> GetCurrentEmployeeAsync(int currentUserId, string? userRole)
+        {
+            var currentEmployee = await _employeeDao.GetEmployeeByIdAsync(currentUserId);
+            if (currentEmployee == null)
+                return (null, BadRequest(new ApiResponse<object>(400, "BadRequest",
+                    $"{userRole} user does not have an associated employee record.")));
+
+            return (currentEmployee, null);
+        }
+
+        #endregion
 
         [HttpPost]
         [Authorize(Roles = "Staff,Admin")]
@@ -44,11 +93,25 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     return BadRequest(new ApiResponse<object>(400, "ValidationError", "Invalid input data.", errors));
                 }
 
+                // Get current user info for authorization
+                var (userIdClaim, userRole) = GetCurrentUserInfo();
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
                 // Validate WorkOrder exists
-                var workOrder = await _context.WorkOrders.FindAsync(dto.WorkOrderId);
+                var workOrder = await _context.WorkOrders
+                    .Include(wo => wo.Center)
+                    .FirstOrDefaultAsync(wo => wo.WorkOrderId == dto.WorkOrderId);
                 if (workOrder == null)
                 {
                     return NotFound(new ApiResponse<object>(404, "NotFound", $"WorkOrder with ID {dto.WorkOrderId} not found."));
+                }
+
+                // Center restriction: Staff chỉ tạo invoice tại center của họ
+                if (userRole == UserRole.Staff.ToString())
+                {
+                    var centerAccessError = await ValidateCenterAccessAsync(workOrder.CenterId, userRole, currentUserId);
+                    if (centerAccessError != null) return centerAccessError;
                 }
 
                 // Validate WorkOrder status
@@ -324,16 +387,27 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             try
             {
                 // Authorization: Customer chỉ xem invoices của mình
-                var userIdClaim = User.FindFirst("UserId")?.Value;
-                var userRole = User.FindFirstValue(ClaimTypes.Role);
+                var (userIdClaim, userRole) = GetCurrentUserInfo();
 
-                if (userRole == "Customer" && int.TryParse(userIdClaim, out int userId))
+                if (userRole == UserRole.Customer.ToString() && int.TryParse(userIdClaim, out int userId))
                 {
                     // Force filter by CustomerId for customers
                     queryParams.CustomerId = userId;
                     _logger.LogInformation("Customer {CustomerId} retrieving their invoices", userId);
                 }
-                // Staff/Admin can see all or filter by CustomerId if provided
+                // Center restriction: Staff chỉ xem invoices tại center của họ
+                else if (userRole == UserRole.Staff.ToString())
+                {
+                    if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                        return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                    var (employee, error) = await GetCurrentEmployeeAsync(currentUserId, userRole);
+                    if (error != null) return error;
+
+                    // Force filter by staff's center
+                    queryParams.CenterId = employee!.CenterId;
+                }
+                // Admin can see all
 
                 var (invoices, total) = await _invoiceDao.GetAllInvoicesAsync(queryParams);
 

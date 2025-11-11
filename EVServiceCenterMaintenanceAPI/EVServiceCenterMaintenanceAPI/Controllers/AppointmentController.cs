@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Net.payOS.Types;
+using System.Security.Claims;
 using static EVServiceCenterMaintenanceAPI.Enums.HostBookingUrl;
 
 namespace EVServiceCenterMaintenanceAPI.Controllers
@@ -23,13 +24,17 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         private readonly EmailService _emailService;
         private readonly EvserviceCenterDbContext _context;
         private readonly PayOSService _payOSService;
-        public AppointmentController(AppointmentDao appointmentDao, WorkOrderDao workOrderDao, EmailService email, EvserviceCenterDbContext context, PayOSService payOSService)
+        private readonly UserDao _userDao;
+        private readonly EmployeeDao _employeeDao;
+        public AppointmentController(AppointmentDao appointmentDao, WorkOrderDao workOrderDao, EmailService email, EvserviceCenterDbContext context, PayOSService payOSService, UserDao userDao, EmployeeDao employeeDao)
         {
             _appointmentDao = appointmentDao;
             _workOrderDao = workOrderDao;
             _emailService = email;
             _context = context;
             _payOSService = payOSService;
+            _userDao = userDao;
+            _employeeDao = employeeDao;
         }
 
         #region Helper Methods
@@ -137,6 +142,49 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         }
 
         /// <summary>
+        /// Get current user info from claims
+        /// </summary>
+        private (string? UserIdClaim, string? UserRole) GetCurrentUserInfo()
+        {
+            var userIdClaim = User.FindFirst("UserId")?.Value;
+            var userRole = User.FindFirstValue(ClaimTypes.Role);
+            return (userIdClaim, userRole);
+        }
+
+        /// <summary>
+        /// Validate Staff/Technician can only access appointments at their center
+        /// </summary>
+        private async Task<IActionResult?> ValidateCenterAccessAsync(int appointmentCenterId, string? userRole, int currentUserId)
+        {
+            if (userRole != UserRole.Staff.ToString() && userRole != UserRole.Technician.ToString())
+                return null; // Not Staff/Technician, no restriction
+
+            var currentEmployee = await _employeeDao.GetEmployeeByIdAsync(currentUserId);
+            if (currentEmployee == null)
+                return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                    $"{userRole} user does not have an associated employee record."));
+
+            if (appointmentCenterId != currentEmployee.CenterId)
+                return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
+                    $"{userRole} can only access appointments from their own service center (Center ID: {currentEmployee.CenterId})."));
+
+            return null;
+        }
+
+        /// <summary>
+        /// Get current employee for center validation
+        /// </summary>
+        private async Task<(Employee? Employee, IActionResult? Error)> GetCurrentEmployeeAsync(int currentUserId, string? userRole)
+        {
+            var currentEmployee = await _employeeDao.GetEmployeeByIdAsync(currentUserId);
+            if (currentEmployee == null)
+                return (null, BadRequest(new ApiResponse<object>(400, "BadRequest",
+                    $"{userRole} user does not have an associated employee record.")));
+
+            return (currentEmployee, null);
+        }
+
+        /// <summary>
         /// Map Appointment entity to AppointmentResponseDto
         /// </summary>
         private static AppointmentResponseDto MapToResponseDto(Appointment appointment, bool includeDetails = false)
@@ -233,6 +281,14 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 var accessError = ValidateCustomerAccess(currentUser!, dto.CustomerId, "create appointments for");
                 if (accessError != null) return accessError;
 
+                // Center restriction: Staff/Technician chỉ tạo appointment cho center của họ
+                var (_, userRole) = GetCurrentUserInfo();
+                if (userRole == UserRole.Staff.ToString() || userRole == UserRole.Technician.ToString())
+                {
+                    var centerAccessError = await ValidateCenterAccessAsync(dto.CenterId, userRole, currentUser!.UserId);
+                    if (centerAccessError != null) return centerAccessError;
+                }
+
                 // Validation: Center exists
                 var centerError = await ValidateCenterExistsAsync(dto.CenterId);
                 if (centerError != null) return centerError;
@@ -241,18 +297,37 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 var vehicleError = await ValidateVehicleBelongsToCustomerAsync(dto.VehicleId, dto.CustomerId);
                 if (vehicleError != null) return vehicleError;
 
+                // Validation: Service Center is Open
+                var center = await _context.ServiceCenters.FindAsync(dto.CenterId);
+                if (center!.Status != ServiceCenterStatus.Open.ToString())
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        "Service center is not open. Cannot create appointment."));
+
+                // Validation: Customer is Active
+                var customer = await _userDao.GetUserByIdAsync(dto.CustomerId);
+                if (customer == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "Customer not found."));
+                if (customer.Status != UserStatus.Active.ToString())
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        "Customer account is not active. Cannot create appointment."));
+
                 using var transaction = await _context.Database.BeginTransactionAsync();
                 try
                 {
                     // Validate and lock slot
                     var (slotSuccess, slot, slotError) = await ValidateAndLockSlotAsync(dto.SlotId, dto.CenterId);
-                    if (!slotSuccess) return slotError!;
+                    if (!slotSuccess)
+                    {
+                        await transaction.RollbackAsync();
+                        return slotError!;
+                    }
 
                     // Validate slot time has not passed
                     var nowVietnam = DateTime.UtcNow.ConvertToVietnamTime();
                     var slotStartTimeVN = slot!.StartTime.ConvertToVietnamTime();
                     if (slotStartTimeVN <= nowVietnam)
                     {
+                        await transaction.RollbackAsync();
                         return BadRequest(new ApiResponse<object>(400, "BadRequest",
                             "Cannot create appointment for a slot that has already passed. Please select a future slot."));
                     }
@@ -260,7 +335,11 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     // Validate services and calculate cost
                     var serviceIds = dto.ServiceIds ?? [];
                     var (servicesSuccess, totalCost, servicesError) = await ValidateServicesAndCalculateCostAsync(serviceIds);
-                    if (!servicesSuccess) return servicesError!;
+                    if (!servicesSuccess)
+                    {
+                        await transaction.RollbackAsync();
+                        return servicesError!;
+                    }
 
                     // Create appointment - AppointmentDate is auto-set from Slot.StartTime
                     var appointment = new Appointment
@@ -277,6 +356,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         UpdatedAt = DateTime.UtcNow
                     };
                     var createdAppointment = await _appointmentDao.CreateAppointmentAsync(appointment);
+
+                    // Mark slot as unavailable (Staff creates confirmed appointments without payment)
+                    slot.IsAvailable = false;
 
                     // Create work order
                     var workOrder = new WorkOrder
@@ -296,8 +378,11 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 
                     await transaction.CommitAsync();
 
+                    // Reload appointment with includes for detailed response
+                    var appointmentWithDetails = await _appointmentDao.GetAppointmentByIdAsync(createdAppointment.AppointmentId);
+
                     // Map to response DTO
-                    var createdDto = MapToResponseDto(createdAppointment);
+                    var createdDto = MapToResponseDto(appointmentWithDetails!, includeDetails: true);
                     createdDto.WorkOrderDetails = new WorkOrderResponseDto
                     {
                         WorkOrderId = createdWorkOrder.WorkOrderId,
@@ -356,6 +441,17 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 var vehicleError = await ValidateVehicleBelongsToCustomerAsync(dto.VehicleId, dto.CustomerId);
                 if (vehicleError != null) return vehicleError;
 
+                // Validation: Service Center is Open
+                var center = await _context.ServiceCenters.FindAsync(dto.CenterId);
+                if (center!.Status != ServiceCenterStatus.Open.ToString())
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        "Service center is not open. Cannot create appointment."));
+
+                // Validation: Customer is Active
+                if (currentUser!.Status != UserStatus.Active.ToString())
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        "Your account is not active. Cannot create appointment."));
+
                 // Validation: BookingAppointment phải có ít nhất 1 service
                 var serviceIds = dto.ServiceIds ?? [];
                 if (serviceIds.Count == 0)
@@ -369,20 +465,29 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 {
                     // Validate and lock slot
                     var (slotSuccess, slot, slotError) = await ValidateAndLockSlotAsync(dto.SlotId, dto.CenterId);
-                    if (!slotSuccess) return slotError!;
+                    if (!slotSuccess)
+                    {
+                        await transaction.RollbackAsync();
+                        return slotError!;
+                    }
 
                     // Validate slot time has not passed
                     var nowVietnam = DateTime.UtcNow.ConvertToVietnamTime();
                     var slotStartTimeVN = slot!.StartTime.ConvertToVietnamTime();
                     if (slotStartTimeVN <= nowVietnam)
                     {
+                        await transaction.RollbackAsync();
                         return BadRequest(new ApiResponse<object>(400, "BadRequest",
                             "Cannot book a slot that has already passed. Please select a future slot."));
                     }
 
                     // Validate services and calculate cost
                     var (servicesSuccess, totalCost, servicesError) = await ValidateServicesAndCalculateCostAsync(serviceIds);
-                    if (!servicesSuccess) return servicesError!;
+                    if (!servicesSuccess)
+                    {
+                        await transaction.RollbackAsync();
+                        return servicesError!;
+                    }
 
 
                     // Create appointment - AppointmentDate is auto-set from Slot.StartTime
@@ -428,6 +533,8 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                          1,
                          (int)s.BasePrice
                      )).ToList();
+                    // Create payment link with 15-minute expiration (default)
+                    // Customer must pay within 15 minutes to reserve the slot
                     var paymentResult = await _payOSService.CreatePaymentLink(
                         createdWorkOrder.WorkOrderId,
                         totalCost,
@@ -435,6 +542,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         items,
                         cancelUrl,
                         successUrl
+                    // expirationMinutes: 15 (default - slot reservation time)
                     );
 
                     createdWorkOrder.OrderCode = paymentResult.orderCode.ToString();
@@ -442,8 +550,11 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 
                     await transaction.CommitAsync();
 
+                    // Reload appointment with includes for detailed response
+                    var appointmentWithDetails = await _appointmentDao.GetAppointmentByIdAsync(createdAppointment.AppointmentId);
+
                     // Map to response DTO
-                    var createdDto = MapToResponseDto(createdAppointment);
+                    var createdDto = MapToResponseDto(appointmentWithDetails!, includeDetails: true);
                     createdDto.PaymentLink = paymentResult.checkoutUrl;
                     createdDto.WorkOrderDetails = new WorkOrderResponseDto
                     {
@@ -484,6 +595,25 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 if (appointment == null)
                     return NotFound(new ApiResponse<AppointmentResponseDto>(404, "NotFound", "Appointment not found."));
 
+                // Authorization checks
+                var (userIdClaim, userRole) = GetCurrentUserInfo();
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                // Customer chỉ xem appointment của mình
+                if (userRole == UserRole.Customer.ToString() && appointment.CustomerId != currentUserId)
+                {
+                    return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
+                        "You can only view your own appointments."));
+                }
+
+                // Staff/Technician chỉ xem appointment tại center của họ
+                if (userRole == UserRole.Staff.ToString() || userRole == UserRole.Technician.ToString())
+                {
+                    var centerError = await ValidateCenterAccessAsync(appointment.CenterId, userRole, currentUserId);
+                    if (centerError != null) return centerError;
+                }
+
                 var dto = MapToResponseDto(appointment, includeDetails: true);
                 return Ok(new ApiResponse<AppointmentResponseDto>(200, "Success", "Appointment retrieved successfully.", data: dto));
             }
@@ -498,12 +628,66 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             try
             {
-                // Validate id matches dto
-                if (id != dtoUpdate.AppointmentId)
-                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Appointment ID mismatch."));
+                // Get appointment để check center access
+                var existingAppointment = await _appointmentDao.GetAppointmentByIdAsync(id);
+                if (existingAppointment == null)
+                    return NotFound(new ApiResponse<AppointmentResponseDto>(404, "NotFound", "Appointment not found."));
+
+                // Center restriction: Staff/Technician chỉ update appointment tại center của họ
+                var (userIdClaim, userRole) = GetCurrentUserInfo();
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                if (userRole == UserRole.Staff.ToString() || userRole == UserRole.Technician.ToString())
+                {
+                    var centerError = await ValidateCenterAccessAsync(existingAppointment.CenterId, userRole, currentUserId);
+                    if (centerError != null) return centerError;
+                }
+
+                // Validate status transition
+                var currentStatus = Enum.Parse<AppointmentStatus>(existingAppointment.Status);
+                var newStatus = dtoUpdate.Status;
+
+                // Cannot change status from Completed or Cancelled
+                if (currentStatus == AppointmentStatus.Completed)
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        "Cannot change status of completed appointment. Appointment is already finalized."));
+
+                if (currentStatus == AppointmentStatus.Cancelled)
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        "Cannot change status of cancelled appointment. Create a new appointment instead."));
+
+                // Validate valid transitions
+                bool isValidTransition = (currentStatus, newStatus) switch
+                {
+                    // From Pending
+                    (AppointmentStatus.Pending, AppointmentStatus.Confirmed) => true,  // Payment received
+                    (AppointmentStatus.Pending, AppointmentStatus.Cancelled) => true,
+
+                    // From Confirmed
+                    (AppointmentStatus.Confirmed, AppointmentStatus.InProgress) => true,  // Check-in
+                    (AppointmentStatus.Confirmed, AppointmentStatus.Cancelled) => true,
+
+                    // From InProgress
+                    (AppointmentStatus.InProgress, AppointmentStatus.Completed) => true,  // Check-out
+                    (AppointmentStatus.InProgress, AppointmentStatus.Cancelled) => true,  // Rare case
+
+                    // Same status (no change)
+                    _ when currentStatus == newStatus => true,
+
+                    // All other transitions invalid
+                    _ => false
+                };
+
+                if (!isValidTransition)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        $"Invalid status transition from {currentStatus} to {newStatus}. " +
+                        $"Valid transitions: Pending→Confirmed/Cancelled, Confirmed→InProgress/Cancelled, InProgress→Completed/Cancelled."));
+                }
 
                 // Update status (DAO returns updated appointment with includes)
-                var updatedAppointment = await _appointmentDao.UpdateAppointmentStatusAsync(dtoUpdate.AppointmentId, dtoUpdate.Status);
+                var updatedAppointment = await _appointmentDao.UpdateAppointmentStatusAsync(id, dtoUpdate.Status);
                 if (updatedAppointment == null)
                     return NotFound(new ApiResponse<AppointmentResponseDto>(404, "NotFound", "Appointment not found."));
 
@@ -530,6 +714,20 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             try
             {
+                // Center restriction: Staff chỉ xem appointments tại center của họ
+                var (userIdClaim, userRole) = GetCurrentUserInfo();
+                if (userRole == UserRole.Staff.ToString())
+                {
+                    if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                        return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                    var (employee, error) = await GetCurrentEmployeeAsync(currentUserId, userRole);
+                    if (error != null) return error;
+
+                    // Force filter by staff's center
+                    queryParams.CenterId = employee!.CenterId;
+                }
+
                 var (appointments, total) = await _appointmentDao.GetAllAppointmentsAsync(queryParams);
                 var dtos = appointments.Select(a => MapToResponseDto(a, includeDetails: true)).ToList();
                 var responseData = new { appointments = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
@@ -555,7 +753,17 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 if (accessError != null) return accessError;
 
                 var appointments = await _appointmentDao.GetAppointmentsByCustomerIdAsync(customerId);
-                var dtos = appointments.Select(a => MapToResponseDto(a)).ToList();
+
+                // Center restriction: Staff chỉ xem appointments của customer tại center của họ
+                if (currentUser!.Role == UserRole.Staff.ToString())
+                {
+                    var (employee, error) = await GetCurrentEmployeeAsync(currentUser.UserId, currentUser.Role);
+                    if (error != null) return error;
+
+                    // Filter appointments by staff's center
+                    appointments = appointments.Where(a => a.CenterId == employee!.CenterId).ToList();
+                }
+                var dtos = appointments.Select(a => MapToResponseDto(a, includeDetails: true)).ToList();
                 return Ok(new ApiResponse<List<AppointmentResponseDto>>(200, "Success", "Appointments retrieved successfully.", data: dtos));
             }
             catch (Exception ex)
@@ -581,7 +789,25 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 }
 
                 var appointments = await _appointmentDao.GetAppointmentsByTechnicianIdAsync(technicianId);
-                var dtos = appointments.Select(a => MapToResponseDto(a)).ToList();
+
+                // Center restriction: Staff chỉ xem appointments của technician tại center của họ
+                if (currentUser.Role == UserRole.Staff.ToString())
+                {
+                    var (employee, error) = await GetCurrentEmployeeAsync(currentUser.UserId, currentUser.Role);
+                    if (error != null) return error;
+
+                    // Verify technician belongs to staff's center
+                    var technicianEmployee = await _employeeDao.GetEmployeeByIdAsync(technicianId);
+                    if (technicianEmployee == null || technicianEmployee.CenterId != employee!.CenterId)
+                    {
+                        return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
+                            $"You can only view appointments of technicians from your own service center (Center ID: {employee!.CenterId})."));
+                    }
+
+                    // Additional filter: appointments must also be at staff's center
+                    appointments = appointments.Where(a => a.CenterId == employee.CenterId).ToList();
+                }
+                var dtos = appointments.Select(a => MapToResponseDto(a, includeDetails: true)).ToList();
                 return Ok(new ApiResponse<List<AppointmentResponseDto>>(200, "Success", "Appointments retrieved successfully.", data: dtos));
             }
             catch (Exception ex)
@@ -603,50 +829,205 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
                 }
 
-                // Validate id matches dto
-                if (id != dto.AppointmentId)
-                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Appointment ID mismatch."));
-
                 var existingAppointment = await _context.Appointments.FindAsync(id);
                 if (existingAppointment == null)
                     return NotFound(new ApiResponse<object>(404, "NotFound", "Appointment not found."));
 
-                // Validation: Center exists
-                var centerError = await ValidateCenterExistsAsync(dto.CenterId);
-                if (centerError != null) return centerError;
-
-                // Validation: Vehicle belongs to customer
-                var vehicleError = await ValidateVehicleBelongsToCustomerAsync(dto.VehicleId, dto.CustomerId);
-                if (vehicleError != null) return vehicleError;
-
-                // Validation: AppointmentDate không được trong quá khứ (theo giờ Vietnam)
-                var todayVietnam = TimeZoneHelper.TodayInVietnam;
-                var appointmentDateVN = dto.AppointmentDate.ConvertToVietnamTime();
-                if (appointmentDateVN.Date < todayVietnam)
-                {
+                // Business rule: Cannot update Completed or Cancelled appointments
+                if (existingAppointment.Status == AppointmentStatus.Completed.ToString())
                     return BadRequest(new ApiResponse<object>(400, "BadRequest",
-                        "Appointment date cannot be in the past."));
+                        "Cannot update completed appointment. Appointment is finalized."));
+
+                if (existingAppointment.Status == AppointmentStatus.Cancelled.ToString())
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        "Cannot update cancelled appointment. Please create a new appointment."));
+
+                // Center restriction: Staff chỉ update appointment tại center của họ
+                var (userIdClaim, userRole) = GetCurrentUserInfo();
+                if (userRole == UserRole.Staff.ToString())
+                {
+                    if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                        return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                    var centerAccessError = await ValidateCenterAccessAsync(existingAppointment.CenterId, userRole, currentUserId);
+                    if (centerAccessError != null) return centerAccessError;
+
+                    // Staff cũng chỉ update sang center của họ (nếu có thay đổi center)
+                    if (dto.CenterId.HasValue)
+                    {
+                        var newCenterError = await ValidateCenterAccessAsync(dto.CenterId.Value, userRole, currentUserId);
+                        if (newCenterError != null) return newCenterError;
+                    }
                 }
 
-                // Build appointment object for update
-                var appointment = new Appointment
-                {
-                    AppointmentId = dto.AppointmentId,
-                    CustomerId = dto.CustomerId,
-                    VehicleId = dto.VehicleId,
-                    CenterId = dto.CenterId,
-                    SlotId = dto.SlotId,
-                    AppointmentDate = dto.AppointmentDate,
-                    Status = dto.Status.ToString(),
-                    Notes = dto.Notes,
-                    AssignedTechnicianId = dto.AssignedTechnicianId,
-                    Amount = existingAppointment.Amount,
-                    UpdatedAt = DateTime.UtcNow
-                };
+                // Determine final values for validation
+                var finalCustomerId = dto.CustomerId ?? existingAppointment.CustomerId;
+                var finalVehicleId = dto.VehicleId ?? existingAppointment.VehicleId;
+                var finalCenterId = dto.CenterId ?? existingAppointment.CenterId;
 
-                var updatedAppointment = await _appointmentDao.UpdateAppointmentAsync(appointment);
-                var updatedDto = MapToResponseDto(updatedAppointment);
-                return Ok(new ApiResponse<AppointmentResponseDto>(200, "Success", "Appointment updated successfully.", data: updatedDto));
+                // Validation: Center exists and is Open (nếu thay đổi)
+                if (dto.CenterId.HasValue)
+                {
+                    var centerError = await ValidateCenterExistsAsync(dto.CenterId.Value);
+                    if (centerError != null) return centerError;
+
+                    var center = await _context.ServiceCenters.FindAsync(dto.CenterId.Value);
+                    if (center!.Status != ServiceCenterStatus.Open.ToString())
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                            "Service center is not open. Cannot update appointment to this center."));
+                }
+
+                // Validation: Customer is Active (nếu thay đổi)
+                if (dto.CustomerId.HasValue)
+                {
+                    var customer = await _userDao.GetUserByIdAsync(dto.CustomerId.Value);
+                    if (customer == null)
+                        return NotFound(new ApiResponse<object>(404, "NotFound", "Customer not found."));
+                    if (customer.Status != UserStatus.Active.ToString())
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                            "Customer account is not active. Cannot update appointment."));
+                }
+
+                // Validation: Vehicle belongs to customer (nếu có thay đổi)
+                if (dto.CustomerId.HasValue || dto.VehicleId.HasValue)
+                {
+                    var vehicleError = await ValidateVehicleBelongsToCustomerAsync(finalVehicleId, finalCustomerId);
+                    if (vehicleError != null) return vehicleError;
+                }
+
+                // Validation: AppointmentDate không được trong quá khứ (theo giờ Vietnam) (nếu thay đổi)
+                if (dto.AppointmentDate.HasValue)
+                {
+                    var todayVietnam = TimeZoneHelper.TodayInVietnam;
+                    var appointmentDateVN = dto.AppointmentDate.Value.ConvertToVietnamTime();
+                    if (appointmentDateVN.Date < todayVietnam)
+                    {
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                            "Appointment date cannot be in the past."));
+                    }
+                }
+
+                // Business rule: Status changes should use dedicated endpoints
+                if (dto.Status.HasValue)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        "Status cannot be updated through this endpoint. Use PUT /api/Appointment/maintain/info/status/{id} to update status or PUT /api/Appointment/{id}/cancel to cancel."));
+                }
+
+                // Validation: SlotId exists, belongs to center, and handle slot availability (nếu thay đổi)
+                if (dto.SlotId.HasValue)
+                {
+                    var newSlot = await _context.AppointmentSlots.FindAsync(dto.SlotId.Value);
+                    if (newSlot == null)
+                        return NotFound(new ApiResponse<object>(404, "NotFound", $"Appointment slot with ID {dto.SlotId.Value} not found."));
+
+                    if (newSlot.CenterId != finalCenterId)
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                            "The selected slot does not belong to the specified service center."));
+
+                    // Validate slot time has not passed
+                    var nowVietnam = DateTime.UtcNow.ConvertToVietnamTime();
+                    var slotStartTimeVN = newSlot.StartTime.ConvertToVietnamTime();
+                    if (slotStartTimeVN <= nowVietnam)
+                    {
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                            "Cannot update to a slot that has already passed. Please select a future slot."));
+                    }
+
+                    // Check new slot is available
+                    if (!newSlot.IsAvailable)
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                            "The selected slot is not available."));
+
+                    // Free old slot if changing
+                    if (existingAppointment.SlotId != dto.SlotId.Value)
+                    {
+                        var oldSlot = await _context.AppointmentSlots.FindAsync(existingAppointment.SlotId);
+                        if (oldSlot != null)
+                        {
+                            oldSlot.IsAvailable = true;
+                        }
+                        // Mark new slot as unavailable
+                        newSlot.IsAvailable = false;
+                    }
+                }
+
+                // Validation: AssignedTechnicianId exists and is a Technician at the center (nếu thay đổi)
+                if (dto.AssignedTechnicianId.HasValue)
+                {
+                    var technician = await _userDao.GetUserByIdAsync(dto.AssignedTechnicianId.Value);
+                    if (technician == null)
+                        return NotFound(new ApiResponse<object>(404, "NotFound", $"User with ID {dto.AssignedTechnicianId.Value} not found."));
+
+                    if (technician.Role != UserRole.Technician.ToString())
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                            "Assigned user must have Technician role."));
+
+                    // Validation: Technician is Active
+                    if (technician.Status != UserStatus.Active.ToString())
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                            "Technician account is not active. Cannot assign."));
+
+                    var technicianEmployee = await _employeeDao.GetEmployeeByIdAsync(dto.AssignedTechnicianId.Value);
+                    if (technicianEmployee == null)
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                            "Technician does not have an associated employee record."));
+
+                    if (technicianEmployee.CenterId != finalCenterId)
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                            "Technician does not belong to the appointment's service center."));
+                }
+
+                // Apply partial updates (with transaction if slot is changing)
+                using var transaction = dto.SlotId.HasValue && existingAppointment.SlotId != dto.SlotId.Value
+                    ? await _context.Database.BeginTransactionAsync()
+                    : null;
+
+                try
+                {
+                    if (dto.CustomerId.HasValue)
+                        existingAppointment.CustomerId = dto.CustomerId.Value;
+
+                    if (dto.VehicleId.HasValue)
+                        existingAppointment.VehicleId = dto.VehicleId.Value;
+
+                    if (dto.CenterId.HasValue)
+                        existingAppointment.CenterId = dto.CenterId.Value;
+
+                    if (dto.SlotId.HasValue)
+                        existingAppointment.SlotId = dto.SlotId.Value;
+
+                    if (dto.AppointmentDate.HasValue)
+                        existingAppointment.AppointmentDate = dto.AppointmentDate.Value;
+
+                    // Status is blocked above - use dedicated endpoints
+
+                    if (dto.Notes != null)
+                        existingAppointment.Notes = dto.Notes;
+
+                    if (dto.AssignedTechnicianId.HasValue)
+                        existingAppointment.AssignedTechnicianId = dto.AssignedTechnicianId.Value;
+
+                    existingAppointment.UpdatedAt = DateTime.UtcNow;
+
+                    var updatedAppointment = await _appointmentDao.UpdateAppointmentAsync(existingAppointment);
+
+                    // Commit transaction if slot was changed
+                    if (transaction != null)
+                        await transaction.CommitAsync();
+
+                    // Reload appointment with includes for detailed response
+                    var appointmentWithDetails = await _appointmentDao.GetAppointmentByIdAsync(updatedAppointment.AppointmentId);
+
+                    var updatedDto = MapToResponseDto(appointmentWithDetails!, includeDetails: true);
+                    return Ok(new ApiResponse<AppointmentResponseDto>(200, "Success", "Appointment updated successfully.", data: updatedDto));
+                }
+                catch
+                {
+                    if (transaction != null)
+                        await transaction.RollbackAsync();
+                    throw;
+                }
             }
             catch (Exception ex)
             {
@@ -659,6 +1040,53 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             try
             {
+                // Get appointment để check center access
+                var existingAppointment = await _appointmentDao.GetAppointmentByIdAsync(id);
+                if (existingAppointment == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "Appointment not found."));
+
+                // Validation: Technician exists and has Technician role
+                var technician = await _userDao.GetUserByIdAsync(technicianId);
+                if (technician == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", $"User with ID {technicianId} not found."));
+
+                if (technician.Role != UserRole.Technician.ToString())
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        "Assigned user must have Technician role."));
+
+                // Validation: Technician is Active
+                if (technician.Status != UserStatus.Active.ToString())
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        "Technician account is not active. Cannot assign."));
+
+                var technicianEmployee = await _employeeDao.GetEmployeeByIdAsync(technicianId);
+                if (technicianEmployee == null)
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        "Technician does not have an associated employee record."));
+
+                // Validation: Technician belongs to appointment's center
+                if (technicianEmployee.CenterId != existingAppointment.CenterId)
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        "Technician does not belong to the appointment's service center."));
+
+                // Center restriction: Staff chỉ assign technician cho appointment tại center của họ
+                var (userIdClaim, userRole) = GetCurrentUserInfo();
+                if (userRole == UserRole.Staff.ToString())
+                {
+                    if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                        return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                    var (employee, error) = await GetCurrentEmployeeAsync(currentUserId, userRole);
+                    if (error != null) return error;
+
+                    // Check appointment thuộc center của staff
+                    if (existingAppointment.CenterId != employee!.CenterId)
+                    {
+                        return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
+                            $"You can only assign technicians to appointments at your own service center (Center ID: {employee.CenterId})."));
+                    }
+                }
+
                 var updatedAppointment = await _appointmentDao.AssignTechnicianAsync(id, technicianId);
                 var dto = MapToResponseDto(updatedAppointment);
                 return Ok(new ApiResponse<AppointmentResponseDto>(200, "Success", "Technician assigned successfully.", data: dto));
@@ -692,6 +1120,13 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     // Authorization check: Customer chỉ cancel appointment của mình
                     var accessError = ValidateCustomerAccess(currentUser!, appointment.CustomerId, "cancel");
                     if (accessError != null) return accessError;
+
+                    // Center restriction: Staff chỉ cancel appointment tại center của họ
+                    if (currentUser!.Role == UserRole.Staff.ToString())
+                    {
+                        var centerError = await ValidateCenterAccessAsync(appointment.CenterId, currentUser.Role, currentUser.UserId);
+                        if (centerError != null) return centerError;
+                    }
 
                     // Business rule: Không cancel nếu đã InProgress hoặc Completed
                     if (appointment.Status == AppointmentStatus.InProgress.ToString())

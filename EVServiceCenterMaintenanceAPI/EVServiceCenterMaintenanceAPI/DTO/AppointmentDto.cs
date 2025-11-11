@@ -47,19 +47,17 @@ namespace EVServiceCenterMaintenanceAPI.DTO
     }
     public class AppointmentUpdateRequestDto
     {
-        [Required] public int AppointmentId { get; set; }
-        [Required] public int CustomerId { get; set; }
-        [Required] public int VehicleId { get; set; }
-        [Required] public int CenterId { get; set; }
-        [Required] public int SlotId { get; set; }
-        [Required] public DateTime AppointmentDate { get; set; }
-        public AppointmentStatus Status { get; set; }
+        public int? CustomerId { get; set; }
+        public int? VehicleId { get; set; }
+        public int? CenterId { get; set; }
+        public int? SlotId { get; set; }
+        public DateTime? AppointmentDate { get; set; }
+        public AppointmentStatus? Status { get; set; }
         public string? Notes { get; set; }
         public int? AssignedTechnicianId { get; set; }
     }
     public class AppointmentUpdateStatusRequestDto
     {
-        [Required] public int AppointmentId { get; set; }
         public AppointmentStatus Status { get; set; }
     }
     public class WorkOrderCreateRequestDto
@@ -96,6 +94,6 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         public AppointmentResponseDto? AppointmentDetails { get; set; }
 
         public List<AppointmentServiceResponseDto>? AppointmentServices { get; set; }
-        public List<ServiceResponseDto>? ServiceDetails { get; set; }
+        public List<ServiceWithPartsResponseDto>? ServiceDetails { get; set; }
     }
 }

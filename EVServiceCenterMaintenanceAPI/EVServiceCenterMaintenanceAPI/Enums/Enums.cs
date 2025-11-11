@@ -1,4 +1,4 @@
-﻿namespace EVServiceCenterMaintenanceAPI.Enums
+namespace EVServiceCenterMaintenanceAPI.Enums
 {
 
     public enum StringLength
@@ -87,6 +87,13 @@
         Inactive
     }
 
+    public enum PaymentType
+    {
+        Deposit,
+        Final,
+        Full
+    }
+
     public enum InvoiceStatus
     {
         Unpaid,
@@ -102,6 +109,12 @@
         OneHour = 60,
         OneHourThirty = 90,
         TwoHours = 120
+    }
+
+    public enum ConversationStatus
+    {
+        Active,
+        Closed
     }
 
     public static class DefaultAvatar
