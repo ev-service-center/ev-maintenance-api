@@ -100,5 +100,28 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 .OrderByDescending(c => c.UpdatedAt)
                 .ToListAsync();
         }
+
+        public async Task<Conversation> UpdateConversationAsync(Conversation conversation)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var existingConversation = await _context.Conversations.FirstOrDefaultAsync(c => c.ConversationId == conversation.ConversationId);
+                if (existingConversation == null)
+                    throw new Exception($"Conversation with ID {conversation.ConversationId} not found.");
+
+                existingConversation.Status = conversation.Status;
+                existingConversation.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return existingConversation;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception($"Failed to update conversation with ID {conversation.ConversationId}.", ex);
+            }
+        }
     }
 }

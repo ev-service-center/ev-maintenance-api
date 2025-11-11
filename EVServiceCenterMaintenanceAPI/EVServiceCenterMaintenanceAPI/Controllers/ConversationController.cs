@@ -130,5 +130,41 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
             }
         }
+
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Staff,Admin")]
+        public async Task<IActionResult> UpdateConversation(int id, [FromBody] ConversationUpdateRequestDto dto)
+        {
+            try
+            {
+                if (id != dto.ConversationId)
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Conversation ID mismatch."));
+
+                var conversation = new Conversation
+                {
+                    ConversationId = dto.ConversationId,
+                    CustomerId = dto.CustomerId,
+                    StaffId = dto.StaffId,
+                    Status = dto.Status.ToString()
+                };
+
+                var updatedConversation = await _conversationDao.UpdateConversationAsync(conversation);
+                var updatedDto = new ConversationResponseDto
+                {
+                    ConversationId = updatedConversation.ConversationId,
+                    CustomerId = updatedConversation.CustomerId,
+                    StaffId = updatedConversation.StaffId,
+                    Status = Enum.Parse<ConversationStatus>(updatedConversation.Status),
+                    CreatedAt = updatedConversation.CreatedAt,
+                    UpdatedAt = updatedConversation.UpdatedAt
+                };
+
+                return Ok(new ApiResponse<ConversationResponseDto>(200, "Success", "Conversation updated successfully.", data: updatedDto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
     }
 }

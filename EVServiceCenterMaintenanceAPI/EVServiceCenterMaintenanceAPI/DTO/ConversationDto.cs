@@ -18,4 +18,12 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         [Required] public int CustomerId { get; set; }
         [Required] public int StaffId { get; set; }
     }
+
+    public class ConversationUpdateRequestDto
+    {
+        [Required] public int ConversationId { get; set; }
+        [Required] public int CustomerId { get; set; }
+        [Required] public int StaffId { get; set; }
+        public ConversationStatus Status { get; set; }
+    }
 }
