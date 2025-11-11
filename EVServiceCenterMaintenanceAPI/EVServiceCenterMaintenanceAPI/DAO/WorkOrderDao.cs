@@ -89,6 +89,9 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 .Include(wo => wo.Appointment)
                 .Include(wo => wo.AppointmentServices)
                     .ThenInclude(aps => aps.Service)
+                .Include(wo => wo.MaintenanceHistories)
+                    .ThenInclude(mh => mh.PartUsages)
+                        .ThenInclude(pu => pu.Part)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(wo => wo.WorkOrderId == id);
         }
@@ -102,6 +105,9 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 .Include(wo => wo.Appointment)
                 .Include(wo => wo.AppointmentServices)
                     .ThenInclude(aps => aps.Service)
+                .Include(wo => wo.MaintenanceHistories)
+                    .ThenInclude(mh => mh.PartUsages)
+                        .ThenInclude(pu => pu.Part)
                 .AsNoTracking()
                 .AsQueryable();
 
@@ -166,6 +172,9 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 .Include(wo => wo.Appointment)
                 .Include(wo => wo.AppointmentServices)
                     .ThenInclude(aps => aps.Service)
+                .Include(wo => wo.MaintenanceHistories)
+                    .ThenInclude(mh => mh.PartUsages)
+                        .ThenInclude(pu => pu.Part)
                 .AsNoTracking()
                 .Where(wo => wo.CustomerId == customerId)
                 .ToListAsync();

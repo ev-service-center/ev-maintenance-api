@@ -251,7 +251,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         CreatedAt = workOrder.Appointment.CreatedAt,
                         UpdatedAt = workOrder.Appointment.UpdatedAt
                     },
-                    ServiceDetails = workOrder.AppointmentServices?.Select(aps => new ServiceResponseDto
+                    ServiceDetails = workOrder.AppointmentServices?.Select(aps => new ServiceWithPartsResponseDto
                     {
                         ServiceId = aps.Service.ServiceId,
                         ServiceName = aps.Service.ServiceName,
@@ -263,7 +263,27 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         ReminderMileage = aps.Service.ReminderMileage ?? 0,
                         Notes = aps.Service.Notes,
                         CreatedAt = aps.Service.CreatedAt,
-                        UpdatedAt = aps.Service.UpdatedAt
+                        UpdatedAt = aps.Service.UpdatedAt,
+                        PartsUsed = workOrder.MaintenanceHistories?
+                            .Where(mh => mh.ServiceId == aps.ServiceId)
+                            .SelectMany(mh => mh.PartUsages ?? new List<PartUsage>())
+                            .Select(pu => new PartUsageResponseDto
+                            {
+                                UsageId = pu.UsageId,
+                                HistoryId = pu.HistoryId,
+                                PartId = pu.PartId,
+                                QuantityUsed = pu.QuantityUsed,
+                                UnitCostPrice = pu.UnitCostPrice,
+                                UnitPrice = pu.UnitPrice,
+                                PartName = pu.Part?.PartName,
+                                PartDescription = pu.Part?.Description,
+                                TotalCost = pu.QuantityUsed * pu.UnitCostPrice,
+                                TotalPrice = pu.QuantityUsed * pu.UnitPrice,
+                                Profit = pu.QuantityUsed * (pu.UnitPrice - pu.UnitCostPrice),
+                                ProfitMargin = pu.UnitPrice > 0 ? Math.Round((pu.UnitPrice - pu.UnitCostPrice) / pu.UnitPrice * 100, 2) : 0,
+                                WorkOrderId = workOrder.WorkOrderId,
+                                VehicleId = workOrder.VehicleId
+                            }).ToList() ?? new List<PartUsageResponseDto>()
                     }).ToList()
                 };
                 return Ok(new ApiResponse<WorkOrderResponseDto>(200, "Success", "WorkOrder retrieved successfully.", data: dto));
@@ -606,7 +626,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         CreatedAt = wo.Appointment.CreatedAt,
                         UpdatedAt = wo.Appointment.UpdatedAt
                     },
-                    ServiceDetails = wo.AppointmentServices?.Select(aps => new ServiceResponseDto
+                    ServiceDetails = wo.AppointmentServices?.Select(aps => new ServiceWithPartsResponseDto
                     {
                         ServiceId = aps.Service.ServiceId,
                         ServiceName = aps.Service.ServiceName,
@@ -618,7 +638,27 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         ReminderMileage = aps.Service.ReminderMileage ?? 0,
                         Notes = aps.Service.Notes,
                         CreatedAt = aps.Service.CreatedAt,
-                        UpdatedAt = aps.Service.UpdatedAt
+                        UpdatedAt = aps.Service.UpdatedAt,
+                        PartsUsed = wo.MaintenanceHistories?
+                            .Where(mh => mh.ServiceId == aps.ServiceId)
+                            .SelectMany(mh => mh.PartUsages ?? new List<PartUsage>())
+                            .Select(pu => new PartUsageResponseDto
+                            {
+                                UsageId = pu.UsageId,
+                                HistoryId = pu.HistoryId,
+                                PartId = pu.PartId,
+                                QuantityUsed = pu.QuantityUsed,
+                                UnitCostPrice = pu.UnitCostPrice,
+                                UnitPrice = pu.UnitPrice,
+                                PartName = pu.Part?.PartName,
+                                PartDescription = pu.Part?.Description,
+                                TotalCost = pu.QuantityUsed * pu.UnitCostPrice,
+                                TotalPrice = pu.QuantityUsed * pu.UnitPrice,
+                                Profit = pu.QuantityUsed * (pu.UnitPrice - pu.UnitCostPrice),
+                                ProfitMargin = pu.UnitPrice > 0 ? Math.Round((pu.UnitPrice - pu.UnitCostPrice) / pu.UnitPrice * 100, 2) : 0,
+                                WorkOrderId = wo.WorkOrderId,
+                                VehicleId = wo.VehicleId
+                            }).ToList() ?? new List<PartUsageResponseDto>()
                     }).ToList()
                 }).ToList();
 
@@ -730,7 +770,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         CreatedAt = wo.Appointment.CreatedAt,
                         UpdatedAt = wo.Appointment.UpdatedAt
                     },
-                    ServiceDetails = wo.AppointmentServices?.Select(aps => new ServiceResponseDto
+                    ServiceDetails = wo.AppointmentServices?.Select(aps => new ServiceWithPartsResponseDto
                     {
                         ServiceId = aps.Service.ServiceId,
                         ServiceName = aps.Service.ServiceName,
@@ -742,7 +782,27 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         ReminderMileage = aps.Service.ReminderMileage ?? 0,
                         Notes = aps.Service.Notes,
                         CreatedAt = aps.Service.CreatedAt,
-                        UpdatedAt = aps.Service.UpdatedAt
+                        UpdatedAt = aps.Service.UpdatedAt,
+                        PartsUsed = wo.MaintenanceHistories?
+                            .Where(mh => mh.ServiceId == aps.ServiceId)
+                            .SelectMany(mh => mh.PartUsages ?? new List<PartUsage>())
+                            .Select(pu => new PartUsageResponseDto
+                            {
+                                UsageId = pu.UsageId,
+                                HistoryId = pu.HistoryId,
+                                PartId = pu.PartId,
+                                QuantityUsed = pu.QuantityUsed,
+                                UnitCostPrice = pu.UnitCostPrice,
+                                UnitPrice = pu.UnitPrice,
+                                PartName = pu.Part?.PartName,
+                                PartDescription = pu.Part?.Description,
+                                TotalCost = pu.QuantityUsed * pu.UnitCostPrice,
+                                TotalPrice = pu.QuantityUsed * pu.UnitPrice,
+                                Profit = pu.QuantityUsed * (pu.UnitPrice - pu.UnitCostPrice),
+                                ProfitMargin = pu.UnitPrice > 0 ? Math.Round((pu.UnitPrice - pu.UnitCostPrice) / pu.UnitPrice * 100, 2) : 0,
+                                WorkOrderId = wo.WorkOrderId,
+                                VehicleId = wo.VehicleId
+                            }).ToList() ?? new List<PartUsageResponseDto>()
                     }).ToList()
                 }).ToList();
 

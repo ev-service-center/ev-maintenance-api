@@ -94,6 +94,6 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         public AppointmentResponseDto? AppointmentDetails { get; set; }
 
         public List<AppointmentServiceResponseDto>? AppointmentServices { get; set; }
-        public List<ServiceResponseDto>? ServiceDetails { get; set; }
+        public List<ServiceWithPartsResponseDto>? ServiceDetails { get; set; }
     }
 }
