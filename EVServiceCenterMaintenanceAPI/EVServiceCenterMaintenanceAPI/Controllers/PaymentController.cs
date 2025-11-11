@@ -602,7 +602,8 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 
                 if (hasDeposit)
                 {
-                    paymentDescription = $"Final payment for Invoice #{invoice.InvoiceId} - Parts";
+                    string baseDescription = $"Final Inv #{invoice.InvoiceId}";
+                    paymentDescription = baseDescription.Length > 25 ? baseDescription.Substring(0, 25) : baseDescription;
 
                     var partUsages = invoice.WorkOrder?.MaintenanceHistories
                         .SelectMany(mh => mh.PartUsages)
@@ -624,7 +625,8 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 {
                     // Walk-in: No deposit paid yet
                     // Full payment = Services + Parts
-                    paymentDescription = $"Full payment for Invoice #{invoice.InvoiceId} - Services & Parts";
+                    string baseDescription = $"Full Inv #{invoice.InvoiceId}";
+                    paymentDescription = baseDescription.Length > 25 ? baseDescription.Substring(0, 25) : baseDescription;
 
                     // Add service items (walk-in always has services)
                     var services = invoice.WorkOrder?.AppointmentServices?.ToList() ?? new List<AppointmentService>();
