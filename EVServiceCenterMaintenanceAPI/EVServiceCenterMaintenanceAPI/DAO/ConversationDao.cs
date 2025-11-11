@@ -1,4 +1,5 @@
 ﻿using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.EntityFrameworkCore;
 
 namespace EVServiceCenterMaintenanceAPI.DAO
@@ -17,6 +18,59 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             return await _context.Conversations
                 .Include(c => c.Chats)
                 .FirstOrDefaultAsync(c => c.ConversationId == conversationId);
+        }
+
+        public async Task<(List<Conversation> Conversations, int Total)> GetAllConversationsAsync(ConversationQueryParams queryParams)
+        {
+            var validation = queryParams.Validate();
+            if (!validation.IsValid)
+            {
+                throw new ArgumentException(validation.ErrorMessage);
+            }
+
+            var query = _context.Conversations
+                .Include(c => c.Customer)
+                .Include(c => c.Staff)
+                .AsQueryable();
+
+            if (queryParams.StatusConversation.HasValue)
+                query = query.Where(c => c.Status == queryParams.StatusConversation.ToString());
+            if (queryParams.UserId.HasValue && queryParams.IsCustomer.HasValue)
+            {
+                if (queryParams.IsCustomer.Value)
+                    query = query.Where(c => c.CustomerId == queryParams.UserId.Value);
+                else
+                    query = query.Where(c => c.StaffId == queryParams.UserId.Value);
+            }
+            if (queryParams.FromDate.HasValue)
+                query = query.Where(c => c.CreatedAt >= queryParams.FromDate.Value);
+            if (queryParams.ToDate.HasValue)
+                query = query.Where(c => c.CreatedAt <= queryParams.ToDate.Value);
+
+            if (!string.IsNullOrEmpty(queryParams.SortBy))
+            {
+                bool isAscending = queryParams.SortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase);
+                switch (queryParams.SortBy.ToLower())
+                {
+                    case "status":
+                        query = isAscending ? query.OrderBy(c => c.Status) : query.OrderByDescending(c => c.Status);
+                        break;
+                    case "createdat":
+                        query = isAscending ? query.OrderBy(c => c.CreatedAt) : query.OrderByDescending(c => c.CreatedAt);
+                        break;
+                    default:
+                        query = isAscending ? query.OrderBy(c => c.ConversationId) : query.OrderByDescending(c => c.ConversationId);
+                        break;
+                }
+            }
+
+            var total = await query.CountAsync();
+            var conversations = await query
+                .Skip((queryParams.Page - 1) * queryParams.PageSize)
+                .Take(queryParams.PageSize)
+                .ToListAsync();
+
+            return (conversations, total);
         }
     }
 }

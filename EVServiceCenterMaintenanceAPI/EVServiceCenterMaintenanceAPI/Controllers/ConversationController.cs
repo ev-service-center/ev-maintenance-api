@@ -1,6 +1,7 @@
 ﻿using EVServiceCenterMaintenanceAPI.DAO;
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Enums;
+using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -38,6 +39,33 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 };
 
                 return Ok(new ApiResponse<ConversationResponseDto>(200, "Success", "Conversation retrieved successfully.", data: dto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpGet]
+        [Authorize(Roles = "Staff,Admin")]
+        public async Task<IActionResult> GetAllConversations([FromQuery] ConversationQueryParams queryParams)
+        {
+            try
+            {
+                var (conversations, total) = await _conversationDao.GetAllConversationsAsync(queryParams);
+
+                var dtos = conversations.Select(c => new ConversationResponseDto
+                {
+                    ConversationId = c.ConversationId,
+                    CustomerId = c.CustomerId,
+                    StaffId = c.StaffId,
+                    Status = Enum.Parse<ConversationStatus>(c.Status),
+                    CreatedAt = c.CreatedAt,
+                    UpdatedAt = c.UpdatedAt
+                }).ToList();
+
+                var responseData = new { conversations = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
+                return Ok(new ApiResponse<object>(200, "Success", "Conversations retrieved successfully.", data: responseData));
             }
             catch (Exception ex)
             {
