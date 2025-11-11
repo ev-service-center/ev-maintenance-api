@@ -156,6 +156,20 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         "You can only view your own work orders."));
                 }
 
+                // Authorization check: Customer chỉ xem work order của mình
+                if (userRole == UserRole.Customer.ToString() && workOrder.CustomerId != userId)
+                {
+                    return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
+                        "You can only view your own work orders."));
+                }
+
+                // Center restriction: Staff/Technician chỉ xem work order tại center của họ
+                if (userRole == UserRole.Staff.ToString() || userRole == UserRole.Technician.ToString())
+                {
+                    var centerAccessError = await ValidateCenterAccessAsync(workOrder.CenterId, userRole, userId);
+                    if (centerAccessError != null) return centerAccessError;
+                }
+
                 // Authorization check: Technician chỉ xem work order có service assigned cho mình
                 if (userRole == UserRole.Technician.ToString())
                 {
@@ -167,13 +181,6 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
                             "You can only view work orders with services assigned to you."));
                     }
-                }
-
-                // Center restriction: Staff chỉ xem work order tại center của họ
-                if (userRole == UserRole.Staff.ToString())
-                {
-                    var centerAccessError = await ValidateCenterAccessAsync(workOrder.CenterId, userRole, userId);
-                    if (centerAccessError != null) return centerAccessError;
                 }
                 var dto = new WorkOrderResponseDto
                 {
@@ -515,6 +522,21 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 }
 
                 var (workOrders, total) = await _workOrderDao.GetAllWorkOrdersAsync(queryParams);
+
+                // Additional filter for Technician: chỉ xem work orders có service assigned cho mình
+                if (userRole == UserRole.Technician.ToString())
+                {
+                    if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                        return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                    workOrders = workOrders
+                        .Where(wo => wo.AppointmentServices?
+                            .Any(aps => aps.AssignedTechnicianId == currentUserId) ?? false)
+                        .ToList();
+
+                    // Cập nhật lại total sau khi filter
+                    total = workOrders.Count;
+                }
                 var dtos = workOrders.Select(wo => new WorkOrderResponseDto
                 {
                     WorkOrderId = wo.WorkOrderId,
