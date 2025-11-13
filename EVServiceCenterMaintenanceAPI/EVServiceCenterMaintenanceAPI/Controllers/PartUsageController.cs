@@ -71,14 +71,34 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     return BadRequest(new ApiResponse<object>(400, "StockNotAvailable", message));
                 }
 
+                if (part == null)
+                {
+                    return NotFound(new ApiResponse<object>(404, "NotFound", $"Part with ID {dto.PartId} not found."));
+                }
+
+                var unitCostPrice = part.CostPrice;
+                var unitPrice = part.Price;
+
+                if (dto.UnitCostPrice.HasValue && dto.UnitCostPrice.Value != unitCostPrice)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        $"UnitCostPrice mismatch. Expected {unitCostPrice}, received {dto.UnitCostPrice.Value}."));
+                }
+
+                if (dto.UnitPrice.HasValue && dto.UnitPrice.Value != unitPrice)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        $"UnitPrice mismatch. Expected {unitPrice}, received {dto.UnitPrice.Value}."));
+                }
+
                 // Create PartUsage entity
                 var partUsage = new PartUsage
                 {
                     HistoryId = dto.HistoryId,
                     PartId = dto.PartId,
                     QuantityUsed = dto.QuantityUsed,
-                    UnitCostPrice = dto.UnitCostPrice ?? part!.CostPrice,
-                    UnitPrice = dto.UnitPrice ?? part!.Price
+                    UnitCostPrice = unitCostPrice,
+                    UnitPrice = unitPrice
                 };
 
                 // Create (DAO handles validation, stock check, and stock deduction)
