@@ -151,7 +151,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 throw new KeyNotFoundException($"Service with ID {serviceId} not found.");
 
             // Soft delete: Set Status = Inactive
-            service.Status = "Inactive";
+            service.Status = ServiceStatus.Inactive.ToString();
             service.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
         }

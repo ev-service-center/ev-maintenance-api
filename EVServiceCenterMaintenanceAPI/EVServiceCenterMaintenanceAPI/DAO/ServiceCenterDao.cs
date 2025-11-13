@@ -8,10 +8,12 @@ namespace EVServiceCenterMaintenanceAPI.DAO
     public class ServiceCenterDao
     {
         private readonly EvserviceCenterDbContext _context;
+        private readonly PartDao _partDao;
 
-        public ServiceCenterDao(EvserviceCenterDbContext context)
+        public ServiceCenterDao(EvserviceCenterDbContext context, PartDao partDao)
         {
             _context = context ?? throw new ArgumentNullException(nameof(context));
+            _partDao = partDao ?? throw new ArgumentNullException(nameof(partDao));
         }
 
         public Task<bool> IsExistServiceCenterAsync(int serviceCenterId)
@@ -54,21 +56,14 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 throw new ArgumentException(ErrorMessage);
             }
 
-            var query = _context.ServiceCenters.AsQueryable();
+            var query = queryParams.StatusServiceCenter.HasValue
+                ? _context.ServiceCenters.IgnoreQueryFilters().AsQueryable()
+                : _context.ServiceCenters.AsQueryable();
 
             if (!string.IsNullOrEmpty(queryParams.Search))
                 query = query.Where(c => c.CenterName.Contains(queryParams.Search) || c.Address.Contains(queryParams.Search));
-
-            // Filter by Status: Nếu có chọn Status thì dùng Status đó, nếu không thì ẩn Deleted
             if (queryParams.StatusServiceCenter.HasValue)
-            {
                 query = query.Where(c => c.Status == queryParams.StatusServiceCenter.ToString());
-            }
-            else
-            {
-                // Mặc định: không show Deleted
-                query = query.Where(c => c.Status != "Deleted");
-            }
             if (queryParams.FromDate.HasValue)
                 query = query.Where(c => c.CreatedAt >= queryParams.FromDate.Value);
             if (queryParams.ToDate.HasValue)
@@ -99,16 +94,46 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             return (centers, total);
         }
 
-        public async Task DeleteServiceCenterAsync(int centerId)
+        public async Task<(int Transferred, int Merged)> DeleteServiceCenterAsync(int centerId, int targetCenterId)
         {
-            var center = await _context.ServiceCenters.FindAsync(centerId);
-            if (center == null)
-                throw new KeyNotFoundException($"Service center with ID {centerId} not found.");
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                // Validate center nguồn tồn tại
+                var center = await _context.ServiceCenters.FindAsync(centerId);
+                if (center == null)
+                    throw new KeyNotFoundException($"Service center with ID {centerId} not found.");
 
-            // Soft delete: Set Status = Deleted
-            center.Status = "Deleted";
-            center.UpdatedAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
+                // Validate center đích tồn tại
+                var targetCenter = await _context.ServiceCenters.FindAsync(targetCenterId);
+                if (targetCenter == null)
+                    throw new KeyNotFoundException($"Target service center with ID {targetCenterId} not found.");
+
+                // Validate center đích không phải là center nguồn
+                if (centerId == targetCenterId)
+                    throw new ArgumentException("Target center must be different from the center being deleted.");
+
+                // Validate center đích không bị Deleted
+                if (targetCenter.Status == ServiceCenterStatus.Deleted.ToString())
+                    throw new ArgumentException($"Cannot transfer parts to a deleted service center (ID: {targetCenterId}).");
+
+                // Transfer tất cả parts sang center đích
+                var (transferred, merged) = await _partDao.TransferPartsToAnotherCenterAsync(centerId, targetCenterId);
+
+                // Soft delete center nguồn
+                center.Status = ServiceCenterStatus.Deleted.ToString();
+                center.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                return (transferred, merged);
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
 
         public async Task<ServiceCenter> UpdateServiceCenterAsync(ServiceCenter center)

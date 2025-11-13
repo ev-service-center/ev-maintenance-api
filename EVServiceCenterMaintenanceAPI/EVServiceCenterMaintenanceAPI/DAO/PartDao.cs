@@ -1,4 +1,5 @@
 ﻿using EVServiceCenterMaintenanceAPI.DTO;
+using EVServiceCenterMaintenanceAPI.Enums;
 using EVServiceCenterMaintenanceAPI.Models;
 using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.EntityFrameworkCore;
@@ -46,7 +47,10 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 throw new ArgumentException(ErrorMessage);
             }
 
-            var query = _context.Parts.AsQueryable();
+            var query = queryParams.StatusPart.HasValue
+                ? _context.Parts.IgnoreQueryFilters().AsQueryable()
+                : _context.Parts.AsQueryable();
+
             if (!string.IsNullOrEmpty(queryParams.Search))
                 query = query.Where(p => p.PartName.Contains(queryParams.Search));
             if (queryParams.CenterId.HasValue)
@@ -148,9 +152,85 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 throw new KeyNotFoundException($"Part with ID {partId} not found.");
 
             // Soft delete: Set Status = Inactive
-            part.Status = "Inactive";
+            part.Status = PartStatus.Inactive.ToString();
             part.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
+        }
+
+        public async Task<(int Transferred, int Merged)> TransferPartsToAnotherCenterAsync(int sourceCenterId, int targetCenterId)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                // Lấy TẤT CẢ parts của center nguồn
+                var sourceParts = await _context.Parts
+                    .Where(p => p.CenterId == sourceCenterId)
+                    .ToListAsync();
+
+                if (sourceParts.Count == 0)
+                {
+                    await transaction.CommitAsync();
+                    return (0, 0); // Không có parts cần transfer
+                }
+
+                // Lấy TẤT CẢ parts của center đích
+                var targetParts = await _context.Parts
+                    .Where(p => p.CenterId == targetCenterId)
+                    .ToListAsync();
+
+                int transferredCount = 0;
+                int mergedCount = 0;
+
+                foreach (var sourcePart in sourceParts)
+                {
+                    // Tìm part tương tự ở center đích
+                    var matchingTargetPart = targetParts.FirstOrDefault(tp =>
+                        tp.PartName.Equals(sourcePart.PartName, StringComparison.OrdinalIgnoreCase) &&
+                        tp.Price == sourcePart.Price);
+
+                    if (matchingTargetPart != null)
+                    {
+                        // MERGE: Cộng dồn số lượng vào part đích
+                        matchingTargetPart.QuantityInStock = (matchingTargetPart.QuantityInStock ?? 0) + (sourcePart.QuantityInStock ?? 0);
+                        matchingTargetPart.UpdatedAt = DateTime.UtcNow;
+                        mergedCount++;
+                    }
+                    else
+                    {
+                        // TRANSFER: Tạo Part MỚI ở center đích
+                        var newPart = new Part
+                        {
+                            PartName = sourcePart.PartName,
+                            Description = sourcePart.Description,
+                            CostPrice = sourcePart.CostPrice,
+                            Price = sourcePart.Price,
+                            QuantityInStock = sourcePart.QuantityInStock,
+                            MinStock = sourcePart.MinStock,
+                            CenterId = targetCenterId,
+                            Status = PartStatus.Active.ToString(),
+                            CreatedAt = DateTime.UtcNow,
+                            UpdatedAt = DateTime.UtcNow
+                        };
+                        _context.Parts.Add(newPart);
+                        transferredCount++;
+                    }
+
+                    // Soft delete part nguồn và RESET quantity = 0
+                    sourcePart.Status = PartStatus.Inactive.ToString();
+                    sourcePart.QuantityInStock = 0;
+                    sourcePart.UpdatedAt = DateTime.UtcNow;
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return (transferredCount, mergedCount);
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception($"Failed to transfer parts from center {sourceCenterId} to center {targetCenterId}.", ex);
+            }
         }
     }
 }

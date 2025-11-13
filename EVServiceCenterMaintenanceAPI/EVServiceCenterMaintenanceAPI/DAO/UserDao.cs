@@ -119,7 +119,9 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 throw new ArgumentException(ErrorMessage);
             }
 
-            var query = _context.Users.AsQueryable();
+            var query = queryParams.StatusUser.HasValue
+                ? _context.Users.IgnoreQueryFilters().AsQueryable()
+                : _context.Users.AsQueryable();
 
             if (centerUserIds != null)
             {
@@ -130,17 +132,8 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 query = query.Where(u => u.Username.Contains(queryParams.Search) || u.FullName.Contains(queryParams.Search) || u.Email.Contains(queryParams.Search));
             if (queryParams.Role.HasValue)
                 query = query.Where(u => u.Role == queryParams.Role.ToString());
-
-            // Filter by Status: Nếu có chọn Status thì dùng Status đó, nếu không thì ẩn Deleted
             if (queryParams.StatusUser.HasValue)
-            {
                 query = query.Where(u => u.Status == queryParams.StatusUser.ToString());
-            }
-            else
-            {
-                // Mặc định: không show Deleted
-                query = query.Where(u => u.Status != "Deleted");
-            }
             if (queryParams.FromDate.HasValue)
                 query = query.Where(u => u.CreatedAt >= queryParams.FromDate.Value);
             if (queryParams.ToDate.HasValue)
@@ -176,7 +169,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 throw new KeyNotFoundException($"User with ID {userId} not found.");
 
             // Soft delete: Set Status = Deleted
-            user.Status = "Deleted";
+            user.Status = UserStatus.Deleted.ToString();
             user.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
         }

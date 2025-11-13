@@ -600,6 +600,10 @@ public partial class EvserviceCenterDbContext : DbContext
                 .HasConstraintName("FK_WorkOrder_Vehicles");
         });
 
+        modelBuilder.Entity<User>().HasQueryFilter(u => u.Status != Enums.UserStatus.Deleted.ToString());
+        modelBuilder.Entity<ServiceCenter>().HasQueryFilter(sc => sc.Status != Enums.ServiceCenterStatus.Deleted.ToString());
+        modelBuilder.Entity<Part>().HasQueryFilter(p => p.Status != Enums.PartStatus.Inactive.ToString());
+
         OnModelCreatingPartial(modelBuilder);
     }
 
