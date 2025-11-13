@@ -127,16 +127,28 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 
         [HttpDelete("{id}")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> DeleteServiceCenter(int id)
+        public async Task<IActionResult> DeleteServiceCenter(int id, [FromQuery] int targetCenterId)
         {
             try
             {
-                await _serviceCenterDao.DeleteServiceCenterAsync(id);
-                return Ok(new ApiResponse<object>(200, "Success", "Service center deleted successfully."));
+                var (transferred, merged) = await _serviceCenterDao.DeleteServiceCenterAsync(id, targetCenterId);
+
+                var message = $"Service center deleted successfully. Parts transferred: {transferred} part(s) created, {merged} part(s) merged into existing inventory.";
+
+                return Ok(new ApiResponse<object>(
+                    200,
+                    "Success",
+                    message,
+                    data: new { transferred, merged }
+                ));
             }
             catch (KeyNotFoundException ex)
             {
                 return NotFound(new ApiResponse<object>(404, "NotFound", ex.Message));
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new ApiResponse<object>(400, "BadRequest", ex.Message));
             }
             catch (Exception ex)
             {

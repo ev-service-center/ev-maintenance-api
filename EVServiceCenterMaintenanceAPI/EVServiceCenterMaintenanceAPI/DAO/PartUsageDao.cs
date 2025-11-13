@@ -1,3 +1,4 @@
+using EVServiceCenterMaintenanceAPI.Enums;
 using EVServiceCenterMaintenanceAPI.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -33,7 +34,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             }
 
             // Check if part is active
-            if (part.Status != "Active")
+            if (part.Status != PartStatus.Active.ToString())
             {
                 throw new InvalidOperationException($"Part '{part.PartName}' is not active. Cannot use inactive parts.");
             }
@@ -286,7 +287,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 return (false, $"Part with ID {partId} not found.", null);
             }
 
-            if (part.Status != "Active")
+            if (part.Status != PartStatus.Active.ToString())
             {
                 return (false, $"Part '{part.PartName}' is not active.", part);
             }
