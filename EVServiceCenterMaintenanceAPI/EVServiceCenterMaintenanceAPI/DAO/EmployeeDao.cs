@@ -79,6 +79,10 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                     _ => isAscending ? query.OrderBy(e => e.EmployeeId) : query.OrderByDescending(e => e.EmployeeId),
                 };
             }
+            else
+            {
+                query = query.OrderByDescending(e => e.EmployeeId);
+            }
 
             var total = await query.CountAsync();
             var employees = await query

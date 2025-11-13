@@ -126,6 +126,10 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                         break;
                 }
             }
+            else
+            {
+                query = query.OrderByDescending(v => v.VehicleId);
+            }
 
             var total = await query.CountAsync();
             var vehicles = await query

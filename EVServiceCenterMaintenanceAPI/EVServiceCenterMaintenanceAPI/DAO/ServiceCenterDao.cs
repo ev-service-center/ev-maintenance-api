@@ -87,7 +87,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             }
             else
             {
-                query = query.OrderBy(c => c.CenterId);
+                query = query.OrderByDescending(c => c.CenterId);
             }
 
             var total = await query.CountAsync();
@@ -183,6 +183,10 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                         query = isAscending ? query.OrderBy(c => c.CenterId) : query.OrderByDescending(c => c.CenterId);
                         break;
                 }
+            }
+            else
+            {
+                query = query.OrderByDescending(c => c.CenterId);
             }
 
             var total = await query.CountAsync();
