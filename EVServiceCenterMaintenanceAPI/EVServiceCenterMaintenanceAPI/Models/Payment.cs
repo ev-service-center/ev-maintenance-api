@@ -7,7 +7,9 @@ public partial class Payment
 {
     public int PaymentId { get; set; }
 
-    public int InvoiceId { get; set; }
+    public int? InvoiceId { get; set; }
+
+    public int? WorkOrderId { get; set; }
 
     public DateTime? PaymentDate { get; set; }
 
@@ -19,5 +21,13 @@ public partial class Payment
 
     public DateTime UpdatedAt { get; set; }
 
-    public virtual Invoice Invoice { get; set; } = null!;
+    public string? OrderCode { get; set; }
+
+    public string? TransactionId { get; set; }
+
+    public string? PaymentType { get; set; }
+
+    public virtual Invoice? Invoice { get; set; }
+
+    public virtual WorkOrder? WorkOrder { get; set; }
 }

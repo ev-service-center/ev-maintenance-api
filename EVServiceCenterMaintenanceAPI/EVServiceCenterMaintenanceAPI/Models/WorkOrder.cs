@@ -27,6 +27,8 @@ public partial class WorkOrder
 
     public string? Notes { get; set; }
 
+    public string? OrderCode { get; set; }
+
     public virtual Appointment? Appointment { get; set; }
 
     public virtual ICollection<AppointmentService> AppointmentServices { get; set; } = new List<AppointmentService>();
@@ -38,6 +40,8 @@ public partial class WorkOrder
     public virtual Invoice? Invoice { get; set; }
 
     public virtual ICollection<MaintenanceHistory> MaintenanceHistories { get; set; } = new List<MaintenanceHistory>();
+
+    public virtual ICollection<Payment> Payments { get; set; } = new List<Payment>();
 
     public virtual Vehicle Vehicle { get; set; } = null!;
 }

@@ -15,23 +15,26 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class AuthController : Controller
+    public class AuthController : ControllerBase
     {
         private readonly UserDao _userDao;
         private readonly AuthDao _authDao;
         private readonly IConfiguration _configuration;
         private readonly EmailService _emailService;
+        private readonly ITokenBlacklistService _tokenBlacklistService;
 
         public AuthController(
             UserDao userDao,
             AuthDao authDao,
             IConfiguration configuration,
-            EmailService emailService)
+            EmailService emailService,
+            ITokenBlacklistService tokenBlacklistService)
         {
             _userDao = userDao ?? throw new ArgumentNullException(nameof(userDao));
             _authDao = authDao ?? throw new ArgumentNullException(nameof(authDao));
             _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
             _emailService = emailService ?? throw new ArgumentNullException(nameof(emailService));
+            _tokenBlacklistService = tokenBlacklistService ?? throw new ArgumentNullException(nameof(tokenBlacklistService));
         }
 
         [HttpPost("register")]
@@ -39,7 +42,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             if (!ModelState.IsValid)
             {
-                var errors = ModelState.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray());
+                var errors = ModelState
+                            .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
                 return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
             }
 
@@ -48,6 +53,11 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 var existingUser = await _userDao.IsEmailExistsAsync(registerDto.Email);
                 if (existingUser)
                     return BadRequest(new ApiResponse<object>(400, "Bad Request", $"Email '{registerDto.Email}' already in use."));
+                var (isValid, errorMessage) = ValidationHelper.ValidatePasswordStrength(registerDto.Password);
+                if (!isValid)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "Bad Request", errorMessage));
+                }
 
                 var user = new User
                 {
@@ -74,14 +84,12 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 var createdUser = await _userDao.RegisterUserAsync(user, registerDto.Password, authToken);
 
                 var appUrl = _configuration["AppUrl"];
-                var url = string.IsNullOrEmpty(appUrl) ? "https://localhost:3000" : appUrl;
-                var activationLink = $"{url}/account/activate?userId={createdUser.UserId}&token={Uri.EscapeDataString(authToken.TokenValue)}";
-                var emailSent = await _emailService.SendActivationEmailAsync(user.FullName, user.Email, activationLink, authToken.ExpiresAt);
-                if (!emailSent)
-                {
-                    await _userDao.DeleteUserAsync(createdUser.UserId);
-                    return StatusCode(500, new ApiResponse<object>(500, "Error", "Failed to send activation email. Please try again."));
-                }
+                var url = string.IsNullOrEmpty(appUrl) ? "http://localhost:3001" : appUrl;
+                var activationLink = $"{url}/auth/activate?userId={createdUser.UserId}&token={Uri.EscapeDataString(authToken.TokenValue)}";
+
+                // Send email backgroud
+                TaskHelper.FireAndForget(user.FullName, user.Email, activationLink, authToken.ExpiresAt,
+                    _emailService.SendActivationEmailAsync);
 
                 return CreatedAtAction(nameof(ActivateAccount), new { userId = createdUser.UserId }, new ApiResponse<object>(
                     201,
@@ -108,12 +116,89 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             return await LoginInternal(loginDto, requireAdmin: true);
         }
 
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] EmailRequestDto forgotPasswordDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState
+                            .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
+                return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+            }
+
+            try
+            {
+                var user = await _userDao.GetUserByEmailAsync(forgotPasswordDto.Email);
+                if (user == null)
+                    return NotFound(new ApiResponse<object>(404, "Not Found", "Email not found."));
+
+                if (user.Status == UserStatus.Pending.ToString())
+                    return Conflict(new ApiResponse<object>(409, "Conflict", "Account is pending activation. Please check your email or contact support."));
+                if (user.Status == UserStatus.Inactive.ToString())
+                    return Conflict(new ApiResponse<object>(409, "Conflict", "Account is inactive. Please contact support."));
+                if (user.Status == UserStatus.Suspended.ToString())
+                    return Conflict(new ApiResponse<object>(409, "Conflict", "Account is suspended. Please contact support."));
+
+                // Check for existing OTP to prevent spam
+                var existingOtp = await _authDao.GetValidTokenByUserIdAndTypeAsync(user.UserId, TokenType.OTP.ToString());
+                if (existingOtp != null)
+                {
+                    var timeSinceLastOtp = DateTime.UtcNow - existingOtp.UpdatedAt;
+                    if (timeSinceLastOtp < TimeSpan.FromSeconds(60))
+                    {
+                        var waitSeconds = 60 - (int)timeSinceLastOtp.TotalSeconds;
+                        return BadRequest(new ApiResponse<object>(429, "Too Many Requests", $"Please wait {waitSeconds} seconds before requesting a new OTP."));
+                    }
+
+                    // Resend existing OTP (still valid)
+                    var emailSent = await _emailService.SendOtpEmailAsync(user.FullName, user.Email, existingOtp.TokenValue, existingOtp.ExpiresAt);
+                    if (!emailSent)
+                    {
+                        return StatusCode(500, new ApiResponse<object>(500, "Error", "Failed to resend OTP email."));
+                    }
+
+                    existingOtp.UpdatedAt = DateTime.UtcNow;
+                    await _authDao.UpdateTokenAsync(existingOtp);
+                    var remainingMinutes = (int)Math.Ceiling((existingOtp.ExpiresAt - DateTime.UtcNow).TotalMinutes);
+                    return Ok(new ApiResponse<object>(200, "Success", $"OTP has been resent to your email. Valid for {remainingMinutes} minute(s)."));
+                }
+
+                var otp = OtpHelper.GenerateOtp();
+                var otpTokenResult = OtpHelper.GenerateOtpToken(otp);
+                var authToken = new AuthToken
+                {
+                    UserId = user.UserId,
+                    TokenType = TokenType.OTP.ToString(),
+                    TokenValue = otpTokenResult.Token,
+                    ExpiresAt = otpTokenResult.ExpiresAt,
+                    CreatedAt = DateTime.UtcNow,
+                    IsUsed = false
+                };
+                await _authDao.CreateTokenAsync(authToken);
+
+                var emailSentNew = await _emailService.SendOtpEmailAsync(user.FullName, user.Email, otp, authToken.ExpiresAt);
+                if (!emailSentNew)
+                {
+                    return StatusCode(500, new ApiResponse<object>(500, "Error", "Failed to send OTP email. Please try again."));
+                }
+
+                return Ok(new ApiResponse<object>(200, "Success", "OTP sent to your email. Please check within 5 minutes."));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to send OTP: {ex.Message}"));
+            }
+        }
+
         [HttpPost("activate")]
         public async Task<IActionResult> ActivateAccount([FromBody] ActivateAccountRequestDto activateDto)
         {
             if (!ModelState.IsValid)
             {
-                var errors = ModelState.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray());
+                var errors = ModelState
+                            .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
                 return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
             }
 
@@ -122,7 +207,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 if (activateDto.UserId <= 0)
                     return BadRequest(new ApiResponse<object>(400, "Bad Request", "Invalid UserId."));
 
-                var user = await _userDao.GetUserByIdAsync(activateDto.UserId);
+                var user = await _userDao.GetUserByIdAsync(activateDto.UserId!.Value);
                 if (user == null)
                     return NotFound(new ApiResponse<object>(404, "Not Found", "User not found."));
 
@@ -130,7 +215,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     return Conflict(new ApiResponse<object>(409, "Conflict", "Account already activated."));
 
                 if (user.Status != UserStatus.Pending.ToString())
-                    return Conflict(new ApiResponse<object>(40, "Conflict", "Account is not in pending state."));
+                    return Conflict(new ApiResponse<object>(409, "Conflict", "Account is not in pending state."));
 
                 var activationToken = await _authDao.GetValidTokenByValueAndTypeAsync(activateDto.Token, TokenType.Activation.ToString());
                 if (activationToken == null || activationToken.UserId != user.UserId)
@@ -157,12 +242,135 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             }
         }
 
+        [HttpPost("resend-activation")]
+        public async Task<IActionResult> ResendActivation([FromBody] EmailRequestDto resendDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState
+                            .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
+                return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+            }
+
+            try
+            {
+                var user = await _userDao.GetUserByEmailAsync(resendDto.Email);
+                if (user == null)
+                    return NotFound(new ApiResponse<object>(404, "Not Found", "Email not found."));
+
+                if (user.Status == UserStatus.Active.ToString())
+                    return BadRequest(new ApiResponse<object>(400, "Bad Request", "Account already activated."));
+
+                if (user.Status != UserStatus.Pending.ToString())
+                    return BadRequest(new ApiResponse<object>(400, "Bad Request", "Account is not in pending state."));
+
+                // Check token valid (not use and not expired)
+                var existingToken = await _authDao.GetValidTokenByUserIdAndTypeAsync(user.UserId, TokenType.Activation.ToString());
+
+                AuthToken tokenToSend;
+                if (existingToken != null)
+                {
+                    // Check limit -> prevent spam
+                    var timeSinceLastSent = DateTime.UtcNow - existingToken.UpdatedAt;
+                    if (timeSinceLastSent < TimeSpan.FromSeconds(60))
+                    {
+                        var waitSeconds = 60 - (int)timeSinceLastSent.TotalSeconds;
+                        return BadRequest(new ApiResponse<object>(429, "Too Many Requests", $"Please wait {waitSeconds} seconds before requesting a new activation email."));
+                    }
+
+                    // Reuse exist token
+                    existingToken.UpdatedAt = DateTime.UtcNow;
+                    await _authDao.UpdateTokenAsync(existingToken);
+                    tokenToSend = existingToken;
+                }
+                else
+                {
+                    // create new token when old token expired
+                    var activationTokenResult = GenerateActivationToken();
+                    tokenToSend = new AuthToken
+                    {
+                        UserId = user.UserId,
+                        TokenType = TokenType.Activation.ToString(),
+                        TokenValue = activationTokenResult.Token,
+                        ExpiresAt = activationTokenResult.ExpiresAt,
+                        CreatedAt = DateTime.UtcNow,
+                        IsUsed = false
+                    };
+                    await _authDao.CreateTokenAsync(tokenToSend);
+                }
+
+                var appUrl = _configuration["AppUrl"];
+                var url = string.IsNullOrEmpty(appUrl) ? "https://localhost:3000" : appUrl;
+                var activationLink = $"{url}/account/activate?userId={user.UserId}&token={Uri.EscapeDataString(tokenToSend.TokenValue)}";
+
+                // Send email background
+                TaskHelper.FireAndForget(user.FullName, user.Email, activationLink, tokenToSend.ExpiresAt,
+                    _emailService.SendActivationEmailAsync);
+
+                var remainingHours = (int)Math.Ceiling((tokenToSend.ExpiresAt - DateTime.UtcNow).TotalHours);
+                return Ok(new ApiResponse<object>(200, "Success", $"Activation email has been resent. Please check your email and activate within {remainingHours} hours."));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to resend activation email: {ex.Message}"));
+            }
+        }
+
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordWithOtpRequestDto resetPasswordDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState
+                            .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
+                return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+            }
+
+            try
+            {
+                var user = await _userDao.GetUserByEmailAsync(resetPasswordDto.Email);
+                if (user == null)
+                    return NotFound(new ApiResponse<object>(404, "Not Found", "User not found."));
+
+                var otpToken = await _authDao.GetValidTokenByValueAndTypeAsync(resetPasswordDto.Otp, TokenType.OTP.ToString());
+                if (otpToken == null || otpToken.UserId != user.UserId)
+                    return BadRequest(new ApiResponse<object>(400, "Bad Request", "Invalid or expired OTP."));
+
+                var (isValid, errorMessage) = ValidationHelper.ValidatePasswordStrength(resetPasswordDto.Password);
+                if (!isValid)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "Bad Request", errorMessage));
+                }
+                // 1. Update password FIRST (most important)
+                await _userDao.UpdateUserAsync(user, resetPasswordDto.Password);
+
+                // 2. Mark OTP as used (after password updated successfully)
+                await _authDao.MarkTokenAsUsedAsync(resetPasswordDto.Otp, TokenType.OTP.ToString());
+
+                // 3. Revoke all refresh tokens for security
+                await _authDao.RevokeRefreshTokensByUserIdAsync(user.UserId);
+
+                // 4. Blacklist all JWT tokens for security
+                await _tokenBlacklistService.BlacklistAllUserTokensAsync(user.UserId);
+
+                return Ok(new ApiResponse<object>(200, "Success", "Password reset successfully. You can now login with your new password."));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to reset password: {ex.Message}"));
+            }
+        }
+
         [HttpPost("refresh-token")]
         public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequestDto refreshTokenDto)
         {
             if (!ModelState.IsValid)
             {
-                var errors = ModelState.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray());
+                var errors = ModelState
+                            .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
                 return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
             }
 
@@ -170,12 +378,26 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             {
                 var userId = JwtHelper.GetUserIdFromHttpContext(HttpContext);
                 var user = await _userDao.GetUserByIdAsync(userId);
-                if (user == null || user.Status != UserStatus.Active.ToString())
-                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "User not found or inactive."));
+                if (user == null)
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "User not found."));
+                if (user.Status != UserStatus.Active.ToString())
+                    return Conflict(new ApiResponse<object>(409, "Conflict", "Account is not active."));
 
                 var authToken = await _authDao.GetValidTokenByValueAndTypeAsync(refreshTokenDto.RefreshToken, TokenType.Refresh.ToString());
                 if (authToken == null || authToken.UserId != userId)
                     return BadRequest(new ApiResponse<object>(400, "Bad Request", "Invalid or expired refresh token."));
+
+                // Blacklist old JWT token
+                var oldJti = HttpContext.User.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+                if (!string.IsNullOrEmpty(oldJti))
+                {
+                    var expClaim = HttpContext.User.FindFirst(JwtRegisteredClaimNames.Exp)?.Value;
+                    if (!string.IsNullOrEmpty(expClaim) && long.TryParse(expClaim, out var expUnix))
+                    {
+                        var expiresAt = DateTime.UnixEpoch.AddSeconds(expUnix);
+                        await _tokenBlacklistService.BlacklistTokenAsync(oldJti, expiresAt);
+                    }
+                }
 
                 var deviceHash = HashDeviceInfo(Request.Headers["User-Agent"].ToString() + HttpContext.Connection.RemoteIpAddress?.ToString());
                 var roles = new List<string> { user.Role };
@@ -197,6 +419,13 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 };
                 await _authDao.CreateTokenAsync(newAuthToken);
 
+                // Track new JWT token
+                var newJti = new JwtSecurityTokenHandler().ReadJwtToken(newAccessToken.Token).Claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Jti)?.Value;
+                if (!string.IsNullOrEmpty(newJti))
+                {
+                    await _tokenBlacklistService.TrackUserTokenAsync(user.UserId, newJti, newAccessToken.ExpiresAt);
+                }
+
                 return Ok(new ApiResponse<object>(200, "Success", "Token refreshed successfully.", null, new
                 {
                     AccessToken = newAccessToken.Token,
@@ -214,15 +443,14 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             if (!ModelState.IsValid)
             {
-                var errors = ModelState.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray());
+                var errors = ModelState
+                            .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
                 return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
             }
 
             try
             {
-                if (!IsValidEmail(resetPasswordDto.Email))
-                    return BadRequest(new ApiResponse<object>(400, "Bad Request", "Invalid email format."));
-
                 var user = await _userDao.GetUserByEmailAsync(resetPasswordDto.Email);
                 if (user == null)
                     return NotFound(new ApiResponse<object>(404, "Not Found", "User not found."));
@@ -250,30 +478,32 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             if (!ModelState.IsValid)
             {
-                var errors = ModelState.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray());
+                var errors = ModelState
+                            .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
                 return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
             }
 
             try
             {
-                var user = await _userDao.GetUserByEmailAsync(loginDto.Email);
+                var user = await _userDao.GetUserByEmailOrUsernameAsync(loginDto.EmailOrUsername);
                 if (user == null || !VerifyPassword(loginDto.Password, user.PasswordHash))
-                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid email or password."));
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid email/username or password."));
 
                 if (user.Status.Equals(UserStatus.Pending.ToString(), StringComparison.OrdinalIgnoreCase))
-                    return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<object>(403, "Forbidden", "Account is pending activation. Please check your email or contact support."));
+                    return Conflict(new ApiResponse<object>(409, "Conflict", "Account is pending activation. Please check your email or contact support."));
                 if (user.Status.Equals(UserStatus.Inactive.ToString(), StringComparison.OrdinalIgnoreCase))
-                    return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<object>(403, "Forbidden", "Account is inactive. Please contact support."));
+                    return Conflict(new ApiResponse<object>(409, "Conflict", "Account is inactive. Please contact support."));
                 if (user.Status.Equals(UserStatus.Suspended.ToString(), StringComparison.OrdinalIgnoreCase))
-                    return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<object>(403, "Forbidden", "Account is suspended. Please contact support."));
+                    return Conflict(new ApiResponse<object>(409, "Conflict", "Account is suspended. Please contact support."));
                 if (user.Status.Equals(UserStatus.Deleted.ToString(), StringComparison.OrdinalIgnoreCase))
-                    return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<object>(403, "Forbidden", "Account is deleted. Please contact support."));
+                    return Conflict(new ApiResponse<object>(409, "Conflict", "Account is deleted. Please contact support."));
 
                 // Check admin role if required
                 if (requireAdmin && user.Role != UserRole.Admin.ToString())
-                    return Unauthorized(new ApiResponse<object>(403, "Forbidden", "Account is not authorized to login here."));
+                    return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<object>(403, "Forbidden", "Account is not authorized to login here."));
 
-                var deviceHash = HashDeviceInfo(Request.Headers["User-Agent"].ToString() + HttpContext.Connection.RemoteIpAddress?.ToString());
+                var deviceHash = HashDeviceInfo(Request.Headers["User-Agent"].ToString());
                 var roles = new List<string> { user.Role };
                 var accessToken = GenerateJwtToken(user, roles, deviceHash);
                 var refreshTokenResult = GenerateRefreshTokenAsync(user);
@@ -288,6 +518,13 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     IsUsed = false
                 };
                 await _authDao.CreateTokenAsync(authToken);
+
+                // Track JWT token for blacklist management
+                var jti = new JwtSecurityTokenHandler().ReadJwtToken(accessToken.Token).Claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Jti)?.Value;
+                if (!string.IsNullOrEmpty(jti))
+                {
+                    await _tokenBlacklistService.TrackUserTokenAsync(user.UserId, jti, accessToken.ExpiresAt);
+                }
 
                 return Ok(new ApiResponse<object>(200, "Success", "Login successful.", null, new
                 {
@@ -368,23 +605,5 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             var hashBytes = sha256.ComputeHash(bytes);
             return Convert.ToBase64String(hashBytes);
         }
-
-        private static bool IsValidEmail(string email)
-        {
-            try
-            {
-                var addr = new System.Net.Mail.MailAddress(email);
-                return addr.Address == email;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-    }
-    public class JwtTokenResult
-    {
-        public string Token { get; set; } = null!;
-        public DateTime ExpiresAt { get; set; }
     }
 }

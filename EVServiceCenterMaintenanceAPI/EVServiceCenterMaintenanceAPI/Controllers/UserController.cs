@@ -1,4 +1,5 @@
-﻿using System.Security.Cryptography;
+﻿using System.IdentityModel.Tokens.Jwt;
+using System.Security.Cryptography;
 using EVServiceCenterMaintenanceAPI.DAO;
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Enums;
@@ -13,20 +14,23 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class UserController : Controller
+    public class UserController : ControllerBase
     {
         private readonly UserDao _userDao;
         private readonly ImageService _imageService;
         private readonly EmailService _emailService;
-
         private readonly AuthDao _authDao;
+        private readonly ITokenBlacklistService _tokenBlacklistService;
+        private readonly EmployeeDao _employeeDao;
 
-        public UserController(UserDao userDao, ImageService imageService, EmailService emailService, AuthDao authDao)
+        public UserController(UserDao userDao, ITokenBlacklistService tokenBlacklistService, ImageService imageService, EmailService emailService, AuthDao authDao, EmployeeDao employeeDao)
         {
             _userDao = userDao;
+            _tokenBlacklistService = tokenBlacklistService;
             _imageService = imageService;
             _emailService = emailService;
             _authDao = authDao;
+            _employeeDao = employeeDao;
         }
 
         [HttpPost]
@@ -63,6 +67,12 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     return BadRequest(new ApiResponse<object>(400, "BadRequest", "Invalid role."));
                 }
 
+                // Prevent Staff from creating Admin users
+                if (User.IsInRole(UserRole.Staff.ToString()) && userDto.Role == UserRole.Admin)
+                {
+                    return StatusCode(403, new ApiResponse<object>(403, "Forbidden", "Staff cannot create Admin users."));
+                }
+
                 var randomPassword = GenerateRandomPassword();
                 var user = new User
                 {
@@ -85,7 +95,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     Phone = createdUser.Phone,
                     Role = Enum.Parse<UserRole>(createdUser.Role),
                     Status = Enum.Parse<UserStatus>(createdUser.Status),
-                    Avatar = UrlHelper.ToAbsoluteUrl(HttpContext, createdUser.Avatar ?? DefaultAvatar.Local),
+                    Avatar = HttpContext.ToAbsoluteUrl(createdUser.Avatar ?? DefaultAvatar.Local),
                     CreatedAt = createdUser.CreatedAt,
                     UpdatedAt = createdUser.UpdatedAt
                 };
@@ -101,13 +111,17 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             }
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("profile")]
         [Authorize]
-        public async Task<IActionResult> GetUser(int id)
+        public async Task<IActionResult> GetProfile()
         {
             try
             {
-                var user = await _userDao.GetUserByIdAsync(id);
+                var userIdClaim = User.FindFirst("UserId")?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                var user = await _userDao.GetUserByIdAsync(userId);
                 if (user == null)
                     return NotFound(new ApiResponse<UserResponseDto>(404, "NotFound", "User not found."));
 
@@ -120,9 +134,68 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     Phone = user.Phone,
                     Role = Enum.Parse<UserRole>(user.Role),
                     Status = Enum.Parse<UserStatus>(user.Status),
-                    Avatar = UrlHelper.ToAbsoluteUrl(HttpContext, user.Avatar ?? DefaultAvatar.Local),
+                    Avatar = HttpContext.ToAbsoluteUrl(user.Avatar ?? DefaultAvatar.Local),
                     CreatedAt = user.CreatedAt,
                     UpdatedAt = user.UpdatedAt
+                };
+
+                return Ok(new ApiResponse<UserResponseDto>(200, "Success", "Profile retrieved successfully.", data: userDto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to get profile: {ex.Message}"));
+            }
+        }
+
+        [HttpGet("{id}")]
+        [Authorize(Roles = "Staff,Admin")]
+        public async Task<IActionResult> GetUser(int id)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst("UserId")?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                var currentUser = await _userDao.GetUserByIdAsync(currentUserId);
+                if (currentUser == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "User not found."));
+
+                var targetUser = await _userDao.GetUserByIdAsync(id);
+                if (targetUser == null)
+                    return NotFound(new ApiResponse<UserResponseDto>(404, "NotFound", "User not found."));
+
+                if (currentUser.Role == UserRole.Staff.ToString())
+                {
+                    // Staff không được xem Admin
+                    if (targetUser.Role == UserRole.Admin.ToString())
+                        return StatusCode(403, new ApiResponse<object>(403, "Forbidden", "Staff cannot view Admin users."));
+
+                    // Staff/Technician: Chỉ xem cùng center
+                    if (targetUser.Role == UserRole.Staff.ToString() || targetUser.Role == UserRole.Technician.ToString())
+                    {
+                        var currentEmployee = await _employeeDao.GetEmployeeByIdAsync(currentUserId);
+                        if (currentEmployee == null)
+                            return BadRequest(new ApiResponse<object>(400, "BadRequest", "Staff user does not have an associated employee record."));
+
+                        var targetEmployee = await _employeeDao.GetEmployeeByIdAsync(id);
+                        if (targetEmployee == null || targetEmployee.CenterId != currentEmployee.CenterId)
+                            return StatusCode(403, new ApiResponse<object>(403, "Forbidden", "Staff can only view Staff/Technician users from their own service center."));
+                    }
+                }
+
+                var userDto = new UserResponseDto
+                {
+                    UserId = targetUser.UserId,
+                    Username = targetUser.Username,
+                    FullName = targetUser.FullName,
+                    Email = targetUser.Email,
+                    Phone = targetUser.Phone,
+                    Role = Enum.Parse<UserRole>(targetUser.Role),
+                    Status = Enum.Parse<UserStatus>(targetUser.Status),
+                    Avatar = HttpContext.ToAbsoluteUrl(targetUser.Avatar ?? DefaultAvatar.Local),
+                    CreatedAt = targetUser.CreatedAt,
+                    UpdatedAt = targetUser.UpdatedAt
                 };
 
                 return Ok(new ApiResponse<UserResponseDto>(200, "Success", "User retrieved successfully.", data: userDto));
@@ -139,8 +212,49 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             try
             {
-                //tuple type
-                var (users, total) = await _userDao.GetAllUsersAsync(queryParams);
+                // Guard: withoutEmployee only makes sense for Staff/Technician and requires role
+                if (queryParams.WithoutEmployee == true && queryParams.Role.HasValue)
+                {
+                    if (queryParams.Role != UserRole.Staff && queryParams.Role != UserRole.Technician)
+                    {
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", "withoutEmployee is only valid for Staff or Technician roles."));
+                    }
+                }
+                else if (queryParams.WithoutEmployee == true && !queryParams.Role.HasValue)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "role is required when withoutEmployee is true (Staff or Technician)."));
+                }
+
+                // Check authorization - Staff needs center filtering
+                var userIdClaim = User.FindFirst("UserId")?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                var currentUser = await _userDao.GetUserByIdAsync(currentUserId);
+                if (currentUser == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "User not found."));
+
+                if (currentUser.Role == UserRole.Staff.ToString() && queryParams.Role == UserRole.Admin)
+                    return StatusCode(403, new ApiResponse<object>(403, "Forbidden", "Staff cannot query Admin users."));
+
+                HashSet<int>? centerUserIds = null;
+                if (currentUser.Role == UserRole.Staff.ToString())
+                {
+                    var currentEmployee = await _employeeDao.GetEmployeeByIdAsync(currentUserId);
+                    if (currentEmployee == null)
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", "Staff user does not have an associated employee record."));
+
+                    // Lấy danh sách userIds của employees trong center này
+                    var (Employees, Total) = await _employeeDao.GetAllEmployeesAsync(new EmployeeQueryParams
+                    {
+                        CenterId = currentEmployee.CenterId,
+                        Page = 1,
+                        PageSize = int.MaxValue
+                    });
+                    centerUserIds = Employees.Select(e => e.EmployeeId).ToHashSet();
+                }
+
+                var (users, total) = await _userDao.GetAllUsersAsync(queryParams, centerUserIds);
 
                 var userDtos = users.Select(u => new UserResponseDto
                 {
@@ -151,13 +265,17 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     Phone = u.Phone,
                     Role = Enum.Parse<UserRole>(u.Role),
                     Status = Enum.Parse<UserStatus>(u.Status),
-                    Avatar = UrlHelper.ToAbsoluteUrl(HttpContext, u.Avatar ?? DefaultAvatar.Local),
+                    Avatar = HttpContext.ToAbsoluteUrl(u.Avatar ?? DefaultAvatar.Local),
                     CreatedAt = u.CreatedAt,
                     UpdatedAt = u.UpdatedAt
                 }).ToList();
 
                 var responseData = new { users = userDtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
                 return Ok(new ApiResponse<object>(200, "Success", "Users retrieved successfully.", data: responseData));
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new ApiResponse<object>(400, "BadRequest", ex.Message));
             }
             catch (Exception ex)
             {
@@ -236,7 +354,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     Phone = updatedUser.Phone,
                     Role = Enum.Parse<UserRole>(updatedUser.Role),
                     Status = Enum.Parse<UserStatus>(updatedUser.Status),
-                    Avatar = UrlHelper.ToAbsoluteUrl(HttpContext, updatedUser.Avatar ?? DefaultAvatar.Local),
+                    Avatar = HttpContext.ToAbsoluteUrl(updatedUser.Avatar ?? DefaultAvatar.Local),
                     CreatedAt = updatedUser.CreatedAt,
                     UpdatedAt = updatedUser.UpdatedAt
                 };
@@ -326,7 +444,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     Phone = updatedUser.Phone,
                     Role = Enum.Parse<UserRole>(updatedUser.Role),
                     Status = Enum.Parse<UserStatus>(updatedUser.Status),
-                    Avatar = UrlHelper.ToAbsoluteUrl(HttpContext, updatedUser.Avatar ?? DefaultAvatar.Local),
+                    Avatar = HttpContext.ToAbsoluteUrl(updatedUser.Avatar ?? DefaultAvatar.Local),
                     CreatedAt = updatedUser.CreatedAt,
                     UpdatedAt = updatedUser.UpdatedAt
                 };
@@ -352,18 +470,19 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         {
             try
             {
-                var user = await _userDao.GetUserByIdAsync(id);
-                if (user == null)
-                    return NotFound(new ApiResponse<object>(404, "NotFound", "User not found."));
+                // Revoke all refresh tokens
+                await _authDao.RevokeRefreshTokensByUserIdAsync(id);
 
-                var success = await _userDao.DeleteUserAsync(id);
-                if (!success)
-                    return NotFound(new ApiResponse<object>(404, "NotFound", "User not found."));
+                // Blacklist all JWT tokens
+                await _tokenBlacklistService.BlacklistAllUserTokensAsync(id);
 
-                if (!string.IsNullOrEmpty(user.Avatar))
-                    _imageService.DeleteImage(user.Avatar);
+                await _userDao.DeleteUserAsync(id);
 
-                return NoContent();
+                return Ok(new ApiResponse<object>(200, "Success", "User deleted successfully."));
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new ApiResponse<object>(404, "NotFound", ex.Message));
             }
             catch (Exception ex)
             {
@@ -399,11 +518,175 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 // Revoke all refresh tokens for security
                 await _authDao.RevokeRefreshTokensByUserIdAsync(userId);
 
+                // Blacklist all JWT tokens for security
+                await _tokenBlacklistService.BlacklistAllUserTokensAsync(userId);
+
                 return Ok(new ApiResponse<object>(200, "Success", "Password changed successfully. Please login again with your new password."));
             }
             catch (Exception ex)
             {
                 return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to change password: {ex.Message}"));
+            }
+        }
+
+        [HttpPost("logout")]
+        [Authorize]
+        public async Task<IActionResult> Logout([FromBody] RefreshTokenRequestDto refreshToken)
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState
+                           .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                           .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
+                return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+            }
+            try
+            {
+                var userIdClaim = User.FindFirst("UserId")?.Value;
+                var jti = HttpContext.User.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                var user = await _userDao.GetUserByIdAsync(userId);
+                if (user == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "User not found."));
+
+                await _authDao.RevokeRefreshTokenByValueAsync(refreshToken.RefreshToken);
+
+                if (!string.IsNullOrEmpty(jti))
+                {
+                    var expClaim = HttpContext.User.FindFirst(JwtRegisteredClaimNames.Exp)?.Value;
+                    if (!string.IsNullOrEmpty(expClaim) && long.TryParse(expClaim, out var expUnix))
+                    {
+                        var expiresAt = DateTime.UnixEpoch.AddSeconds(expUnix);
+                        await _tokenBlacklistService.BlacklistTokenAsync(jti, expiresAt);
+                    }
+                }
+
+                return Ok(new ApiResponse<object>(200, "Success", "Logout successful."));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to logout: {ex.Message}"));
+            }
+        }
+
+        [HttpGet("role/{role}")]
+        [Authorize(Roles = "Staff,Admin")]
+        public async Task<IActionResult> GetUsersByRole(string role, [FromQuery] UserRoleQueryParams queryParams)
+        {
+            try
+            {
+                // Validate role parameter
+                if (!Enum.TryParse<UserRole>(role, true, out var roleEnum) || !Enum.IsDefined(typeof(UserRole), roleEnum))
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", $"Invalid role: {role}. Valid roles are: {string.Join(", ", Enum.GetNames(typeof(UserRole)))}"));
+                }
+
+                var userIdClaim = User.FindFirst("UserId")?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                var currentUser = await _userDao.GetUserByIdAsync(currentUserId);
+                if (currentUser == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "User not found."));
+
+                if (currentUser.Role == UserRole.Staff.ToString() && roleEnum == UserRole.Admin)
+                    return StatusCode(403, new ApiResponse<object>(403, "Forbidden", "Staff cannot query Admin users."));
+
+                HashSet<int>? centerUserIds = null;
+                if (currentUser.Role == UserRole.Staff.ToString())
+                {
+                    var currentEmployee = await _employeeDao.GetEmployeeByIdAsync(currentUserId);
+                    if (currentEmployee == null)
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", "Staff user does not have an associated employee record."));
+
+                    // Lấy danh sách userIds của employees trong center này (nếu query Staff/Technician)
+                    if (roleEnum == UserRole.Staff || roleEnum == UserRole.Technician)
+                    {
+                        var (Employees, Total) = await _employeeDao.GetAllEmployeesAsync(new EmployeeQueryParams
+                        {
+                            CenterId = currentEmployee.CenterId,
+                            Page = 1,
+                            PageSize = int.MaxValue
+                        });
+                        centerUserIds = Employees.Select(e => e.EmployeeId).ToHashSet();
+                    }
+                }
+
+                var (users, total) = await _userDao.GetUsersByRoleAsync(roleEnum, queryParams, centerUserIds);
+
+                var dtos = users.Select(u => new UserResponseDto
+                {
+                    UserId = u.UserId,
+                    Username = u.Username,
+                    FullName = u.FullName,
+                    Email = u.Email,
+                    Phone = u.Phone,
+                    Role = Enum.Parse<UserRole>(u.Role),
+                    Status = Enum.Parse<UserStatus>(u.Status),
+                    Avatar = HttpContext.ToAbsoluteUrl(u.Avatar ?? DefaultAvatar.Local),
+                    CreatedAt = u.CreatedAt,
+                    UpdatedAt = u.UpdatedAt
+                }).ToList();
+
+                var responseData = new { users = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
+                return Ok(new ApiResponse<object>(200, "Success", "Users retrieved successfully.", data: responseData));
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new ApiResponse<object>(400, "BadRequest", ex.Message));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to get users by role: {ex.Message}"));
+            }
+        }
+
+        [HttpPost("change-password-otp")]
+        [Authorize]
+        public async Task<IActionResult> ChangePasswordOTP()
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst("UserId")?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                var user = await _userDao.GetUserByIdAsync(userId);
+                if (user == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "User not found."));
+
+                var otp = OtpHelper.GenerateOtp();
+                var otpTokenResult = OtpHelper.GenerateOtpToken(otp);
+                var authToken = new AuthToken
+                {
+                    UserId = user.UserId,
+                    TokenType = TokenType.OTP.ToString(),
+                    TokenValue = otpTokenResult.Token,
+                    ExpiresAt = otpTokenResult.ExpiresAt,
+                    CreatedAt = DateTime.UtcNow,
+                    IsUsed = false
+                };
+                await _authDao.CreateTokenAsync(authToken);
+
+                var emailSent = await _emailService.SendOtpEmailAsync(user.FullName, user.Email, otp, authToken.ExpiresAt);
+                if (!emailSent)
+                {
+                    await _authDao.MarkTokenAsUsedAsync(authToken.TokenValue, TokenType.OTP.ToString());
+                    return StatusCode(500, new ApiResponse<object>(500, "Error", "Failed to send OTP email."));
+                }
+
+                return Ok(new ApiResponse<object>(200, "Success", "OTP sent to your email. Please check within 5 minutes.", null, new
+                {
+                    Message = "New OTP sent successfully",
+                    ExpiresIn = "5 minutes"
+                }));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", $"Failed to send OTP: {ex.Message}"));
             }
         }
 
@@ -423,3 +706,4 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         }
     }
 }
+

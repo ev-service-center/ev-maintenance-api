@@ -5,9 +5,9 @@ namespace EVServiceCenterMaintenanceAPI.DTO
 {
     public class UserCreateRequestDto
     {
-        [Required, StringLength(50)] public string Username { get; set; } = null!;
-        [Required, StringLength(100)] public string FullName { get; set; } = null!;
-        [Required, EmailAddress, StringLength(100)] public string Email { get; set; } = null!;
+        [Required, StringLength((int)StringLength.MaxUsername, MinimumLength = (int)StringLength.MinUsername)] public string Username { get; set; } = null!;
+        [Required, StringLength((int)StringLength.FullName)] public string FullName { get; set; } = null!;
+        [Required, EmailAddress, StringLength((int)StringLength.Email)] public string Email { get; set; } = null!;
         [RegularExpression(@"^(\+84|0)[0-9]{9,10}$", ErrorMessage = "Invalid Vietnamese phone number format.")]
         public string? Phone { get; set; }
         [Required(ErrorMessage = "Role is required")]
@@ -17,8 +17,8 @@ namespace EVServiceCenterMaintenanceAPI.DTO
 
     public class UserUpdateRequestDto
     {
-        [StringLength(100)] public string? FullName { get; set; }
-        [EmailAddress, StringLength(100)] public string? Email { get; set; }
+        [StringLength((int)StringLength.FullName)] public string FullName { get; set; } = null!;
+        [EmailAddress, StringLength((int)StringLength.Email)] public string Email { get; set; } = null!;
         [RegularExpression(@"^(\+84|0)[0-9]{9,10}$", ErrorMessage = "Invalid Vietnamese phone number format.")]
         public string? Phone { get; set; }
         public UserRole? Role { get; set; }
@@ -42,9 +42,9 @@ namespace EVServiceCenterMaintenanceAPI.DTO
 
     public class UserProfileUpdateRequestDto
     {
-        [StringLength(50)] public string? Username { get; set; }
-        [StringLength(100)] public string? FullName { get; set; }
-        [EmailAddress, StringLength(100)] public string? Email { get; set; }
+        [StringLength((int)StringLength.MaxUsername)] public string? Username { get; set; }
+        [StringLength((int)StringLength.FullName)] public string? FullName { get; set; }
+        [EmailAddress, StringLength((int)StringLength.Email)] public string? Email { get; set; }
         [RegularExpression(@"^(\+84|0)[0-9]{9,10}$", ErrorMessage = "Invalid Vietnamese phone number format.")]
         public string? Phone { get; set; }
         public IFormFile? Avatar { get; set; }
@@ -53,11 +53,11 @@ namespace EVServiceCenterMaintenanceAPI.DTO
     public class ChangePasswordRequestDto
     {
         [Required(ErrorMessage = "Old password is required.")]
-        [StringLength(32, MinimumLength = 1, ErrorMessage = "Old password cannot be empty.")]
+        [StringLength((int)StringLength.MaxPassWord, MinimumLength = (int)StringLength.MinPassWord, ErrorMessage = "Old password cannot be empty.")]
         public string OldPassword { get; set; } = null!;
 
         [Required(ErrorMessage = "New password is required.")]
-        [StringLength(32, MinimumLength = 8, ErrorMessage = "New password must be between 8 and 32 characters.")]
+        [StringLength((int)StringLength.MaxPassWord, MinimumLength = (int)StringLength.MinPassWord, ErrorMessage = "New password must be between 8 and 32 characters.")]
         public string NewPassword { get; set; } = null!;
     }
 }

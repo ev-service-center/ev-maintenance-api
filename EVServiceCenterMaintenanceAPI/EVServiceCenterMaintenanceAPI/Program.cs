@@ -1,3 +1,4 @@
+using EVServiceCenterMaintenanceAPI.Background;
 using EVServiceCenterMaintenanceAPI.DAO;
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Extensions;
@@ -5,8 +6,10 @@ using EVServiceCenterMaintenanceAPI.Models;
 using EVServiceCenterMaintenanceAPI.Services;
 using EVServiceCenterMaintenanceAPI.Utils;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -14,6 +17,14 @@ using System.Text.Json.Serialization;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+
+// Configure logging
+builder.Services.AddLogging(builder =>
+{
+    builder.AddConsole();
+    builder.AddDebug();
+    builder.SetMinimumLevel(LogLevel.Information);
+});
 
 builder.Services.AddControllers().ConfigureApiBehaviorOptions(configure =>
 {
@@ -59,14 +70,21 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddDbContext<EvserviceCenterDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// Redis Cache Configuration
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = builder.Configuration.GetConnectionString("Redis");
+    options.InstanceName = "EVServiceCenter";
+});
 //Configure CORS
 builder.Services.AddCors(options =>
 {
-    options.AddDefaultPolicy(builder =>
+    options.AddPolicy("Frontend", policy =>
     {
-        builder.AllowAnyMethod()
-               .AllowAnyHeader()
-               .AllowCredentials();
+        policy.WithOrigins("http://localhost:3000")
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
     });
 });
 
@@ -76,7 +94,34 @@ builder.Services.AddScoped<AuthDao>();
 builder.Services.AddScoped<EmailService>();
 builder.Services.Configure<EmailSetting>(builder.Configuration.GetSection("EmailSettings"));
 builder.Services.AddScoped<ImageService>();
+builder.Services.AddScoped<VehicleDao>();
+builder.Services.AddScoped<AuthTokenDao>();
+builder.Services.AddScoped<ServiceDao>();
+builder.Services.AddScoped<PartDao>();
+builder.Services.AddScoped<ServiceCenterDao>();
+builder.Services.AddScoped<EmployeeDao>();
+builder.Services.AddScoped<ReminderDao>();
+builder.Services.AddScoped<ConversationDao>();
+builder.Services.AddScoped<ChatDao>();
+builder.Services.AddScoped<MaintenanceHistoryDao>();
+builder.Services.AddScoped<PartUsageDao>();
+builder.Services.AddScoped<AppointmentSlotGeneratorService>();
+builder.Services.AddHostedService<SlotGenerationBackgroundService>();
+builder.Services.AddScoped<AppointmentSlotDao>();
+builder.Services.AddScoped<AppointmentDao>();
+builder.Services.AddScoped<WorkOrderDao>();
+builder.Services.AddScoped<InvoiceDao>();
+builder.Services.AddScoped<PayOSService>();
+builder.Services.Configure<PayOSSettings>(builder.Configuration.GetSection("PayOS"));
+builder.Services.Configure<ForwardedHeadersOptions>(option =>
+{
+    option.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    option.KnownProxies.Add(IPAddress.Parse("172.18.0.4"));
+    option.ForwardLimit = 1;
+});
 
+
+builder.Services.AddScoped<ITokenBlacklistService, TokenBlacklistService>();
 
 // Configure Authentication
 builder.Services.AddAuthentication(options =>
@@ -94,7 +139,7 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = builder.Configuration["Jwt:Issuer"],
         ValidAudience = builder.Configuration["Jwt:Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+            Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"] ?? throw new Exception("Jwt:Key is missing")))
     };
 
     options.Events = new JwtBearerEvents
@@ -108,6 +153,19 @@ builder.Services.AddAuthentication(options =>
                 context.Token = accessToken;
             }
             return Task.CompletedTask;
+        },
+        OnTokenValidated = async context =>
+        {
+            var jti = context.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+            if (!string.IsNullOrEmpty(jti))
+            {
+                var blacklistService = context.HttpContext.RequestServices.GetRequiredService<ITokenBlacklistService>();
+                if (await blacklistService.IsTokenBlacklistedAsync(jti))
+                {
+                    context.Fail("Token has been revoked");
+                    return;
+                }
+            }
         },
         OnChallenge = context =>
         {
@@ -149,18 +207,17 @@ builder.Services.AddAuthorizationBuilder()
 
 var app = builder.Build();
 
-//Seed Admin user on startup
+//Seed all necessary data on startup
 using (var scope = app.Services.CreateScope())
 {
-    await DatabaseSeeder.SeedAdminUserAsync(scope.ServiceProvider);
+    await DatabaseSeeder.SeedAllAsync(scope.ServiceProvider);
 }
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "EV Service Center Maintenance API v1"));
-}
+
+app.UseSwagger();
+app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "EV Service Center Maintenance API v1"));
+
 
 //Ensure exist wwwroot
 var webRootPath = app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
@@ -169,9 +226,10 @@ if (!Directory.Exists(webRootPath))
     Directory.CreateDirectory(webRootPath);
 }
 
+app.UseForwardedHeaders();
 app.UseStaticFiles();
 
-app.UseCors();
+app.UseCors("Frontend");
 
 app.UseHttpsRedirection();
 
@@ -180,6 +238,15 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+app.MapGet("/test", (HttpContext ctx) =>
+{
+    return new
+    {
+        remoteIp = ctx.Connection.RemoteIpAddress?.ToString(),
+        xForwardedFor = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()
+    };
+});
 
 app.Run();
 

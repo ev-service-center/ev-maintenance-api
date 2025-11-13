@@ -13,6 +13,8 @@ public partial class PartUsage
 
     public int QuantityUsed { get; set; }
 
+    public decimal UnitCostPrice { get; set; }
+
     public decimal UnitPrice { get; set; }
 
     public virtual MaintenanceHistory History { get; set; } = null!;
