@@ -259,7 +259,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         _context.Payments.Add(payment);
 
                         // Check if invoice is fully paid
-                        decimal totalPaid = workOrder.Invoice.Payments.Sum(p => p.Amount) + payment.Amount;
+                        decimal totalPaid = workOrder.Invoice.Payments.Sum(p => p.Amount);
                         if (totalPaid >= workOrder.Invoice.TotalAmount)
                         {
                             workOrder.Invoice.Status = "Paid";
@@ -688,6 +688,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     _logger.LogError("Failed to create PayOS payment link for Invoice {InvoiceId}", dto.InvoiceId);
                     return StatusCode(500, new ApiResponse<object>(500, "Error", "Failed to create payment link."));
                 }
+
+                invoice.WorkOrder!.OrderCode = createPaymentResult.orderCode.ToString();
+                await _context.SaveChangesAsync();
 
                 // Generate QR code URL
                 string qrCodeUrl = $"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={Uri.EscapeDataString(createPaymentResult.checkoutUrl)}";
