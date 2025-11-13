@@ -159,7 +159,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
         private static IQueryable<Service> ApplySorting(IQueryable<Service> query, string? sortBy, string sortOrder)
         {
             if (string.IsNullOrEmpty(sortBy))
-                return query.OrderBy(s => s.ServiceId);
+                return query.OrderByDescending(s => s.ServiceId);
 
             bool isAscending = sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase);
 

@@ -150,9 +150,13 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                         query = queryParams.SortOrder == "desc" ? query.OrderByDescending(wo => wo.CheckInAt) : query.OrderBy(wo => wo.CheckInAt);
                         break;
                     default:
-                        query = query.OrderBy(wo => wo.WorkOrderId);
+                        query = queryParams.SortOrder == "desc" ? query.OrderByDescending(wo => wo.WorkOrderId) : query.OrderBy(wo => wo.WorkOrderId);
                         break;
                 }
+            }
+            else
+            {
+                query = query.OrderByDescending(wo => wo.WorkOrderId);
             }
 
             query = query

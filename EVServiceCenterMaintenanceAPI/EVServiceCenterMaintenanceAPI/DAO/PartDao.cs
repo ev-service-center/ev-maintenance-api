@@ -72,7 +72,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             }
             else
             {
-                query = query.OrderBy(p => p.PartId);
+                query = query.OrderByDescending(p => p.PartId);
             }
 
             var total = await query.CountAsync();

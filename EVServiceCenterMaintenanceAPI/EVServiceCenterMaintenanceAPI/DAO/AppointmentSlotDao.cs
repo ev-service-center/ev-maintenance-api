@@ -124,6 +124,11 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                     _ => isAscending ? query.OrderBy(s => s.SlotId) : query.OrderByDescending(s => s.SlotId),
                 };
             }
+            else
+            {
+                // Default: Sort by StartTime ascending for easier slot selection
+                query = query.OrderBy(s => s.StartTime);
+            }
 
             var total = await query.CountAsync();
             var slots = await query

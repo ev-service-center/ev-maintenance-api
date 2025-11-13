@@ -232,7 +232,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
         private static IQueryable<User> ApplySorting(IQueryable<User> query, string? sortBy, string sortOrder)
         {
             if (sortBy == null || string.IsNullOrWhiteSpace(sortBy))
-                return query.OrderBy(u => u.UserId);
+                return query.OrderByDescending(u => u.UserId);
 
             bool isAscending = sortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase);
 

@@ -4,7 +4,7 @@
     {
         private int _page = 1;
         private int _pageSize = 10;
-        private string _sortOrder = "asc";
+        private string _sortOrder = "desc";
 
         //public virtual string? Type { get; set; }
 
