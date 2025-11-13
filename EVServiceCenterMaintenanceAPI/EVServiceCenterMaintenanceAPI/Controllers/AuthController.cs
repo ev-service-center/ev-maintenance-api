@@ -22,19 +22,22 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         private readonly IConfiguration _configuration;
         private readonly EmailService _emailService;
         private readonly ITokenBlacklistService _tokenBlacklistService;
+        private readonly EvserviceCenterDbContext _context;
 
         public AuthController(
             UserDao userDao,
             AuthDao authDao,
             IConfiguration configuration,
             EmailService emailService,
-            ITokenBlacklistService tokenBlacklistService)
+            ITokenBlacklistService tokenBlacklistService,
+            EvserviceCenterDbContext context)
         {
             _userDao = userDao ?? throw new ArgumentNullException(nameof(userDao));
             _authDao = authDao ?? throw new ArgumentNullException(nameof(authDao));
             _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
             _emailService = emailService ?? throw new ArgumentNullException(nameof(emailService));
             _tokenBlacklistService = tokenBlacklistService ?? throw new ArgumentNullException(nameof(tokenBlacklistService));
+            _context = context ?? throw new ArgumentNullException(nameof(context));
         }
 
         [HttpPost("register")]
@@ -221,20 +224,31 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 if (activationToken == null || activationToken.UserId != user.UserId)
                     return NotFound(new ApiResponse<object>(404, "Not Found", "Invalid or expired activation token."));
 
-                user.Status = UserStatus.Active.ToString();
-                user.UpdatedAt = DateTime.UtcNow;
-
-                await _authDao.MarkTokenAsUsedAsync(activateDto.Token, TokenType.Activation.ToString());
-
-                await _userDao.UpdateUserAsync(user);
-
-                return Ok(new ApiResponse<object>(200, "Success", "Account activated successfully!", null, new
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    Message = "Account activated successfully",
-                    user.UserId,
-                    user.Email,
-                    Status = "active"
-                }));
+                    user.Status = UserStatus.Active.ToString();
+                    user.UpdatedAt = DateTime.UtcNow;
+
+                    await _userDao.UpdateUserAsync(user);
+
+                    await _authDao.MarkTokenAsUsedAsync(activateDto.Token, TokenType.Activation.ToString());
+
+                    await transaction.CommitAsync();
+
+                    return Ok(new ApiResponse<object>(200, "Success", "Account activated successfully!", null, new
+                    {
+                        Message = "Account activated successfully",
+                        user.UserId,
+                        user.Email,
+                        Status = "active"
+                    }));
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
             }
             catch (Exception ex)
             {
