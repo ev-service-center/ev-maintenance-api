@@ -129,7 +129,7 @@ namespace EVServiceCenterMaintenanceAPI.Services
                 }
 
                 var message = EmailTemplate.GenerateMaintenanceStatusEmailTemplate(app);
-                await SendEmailAsync(toEmail, "Thông báo trạng thái bảo dưỡng xe - 3DO Corp", message, true);
+                await SendEmailAsync(toEmail, "Thông báo trạng thái bảo dưỡng xe - EV Service Center", message, true);
                 return true;
             }
             catch (Exception)
@@ -223,7 +223,21 @@ namespace EVServiceCenterMaintenanceAPI.Services
             try
             {
                 var message = EmailTemplate.GenerateMaintenanceHistoryEmailTemplate(history);
-                await SendEmailAsync(toEmail, "Thông báo lịch sử bảo dưỡng xe - 3DO Corp", message, true);
+                await SendEmailAsync(toEmail, "Thông báo lịch sử bảo dưỡng xe - EV Service Center", message, true);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        public async Task<bool> SendMaintenanceHistoriesCreatedEmailAsync(List<MaintenanceHistoryResponseDto> histories, string toEmail)
+        {
+            try
+            {
+                var message = EmailTemplate.GenerateMaintenanceHistoriesEmailTemplate(histories);
+                await SendEmailAsync(toEmail, "Thông báo lịch sử bảo dưỡng xe - EV Service Center", message, true);
                 return true;
             }
             catch (Exception)

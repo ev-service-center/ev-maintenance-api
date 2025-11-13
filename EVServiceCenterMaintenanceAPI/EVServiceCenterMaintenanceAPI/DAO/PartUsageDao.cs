@@ -56,12 +56,45 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 throw new ArgumentException($"UnitPrice must be greater than 0. Current value: {partUsage.UnitPrice}");
             }
 
+            if (partUsage.UnitCostPrice != part.CostPrice)
+            {
+                throw new InvalidOperationException(@$"UnitCostPrice mismatch. Expected: {part.CostPrice}, Provided: {partUsage.UnitCostPrice}. Prices must match the current part cost price in the database.");
+            }
+
+            if (partUsage.UnitPrice != part.Price)
+            {
+                throw new InvalidOperationException(@$"UnitPrice mismatch. Expected: {part.Price}, Provided: {partUsage.UnitPrice}. Prices must match the current part price in the database.");
+            }
+
             using var transaction = await _context.Database.BeginTransactionAsync();
 
             try
             {
-                // 1. Create PartUsage record
-                _context.PartUsages.Add(partUsage);
+                // 1. Check if a usage for the same part & history already exists
+                var existingUsage = await _context.PartUsages
+                    .FirstOrDefaultAsync(pu =>
+                        pu.HistoryId == partUsage.HistoryId &&
+                        pu.PartId == partUsage.PartId);
+
+                PartUsage targetUsage;
+
+                if (existingUsage != null)
+                {
+                    existingUsage.QuantityUsed += partUsage.QuantityUsed;
+                    // Use current prices from DB (already verified above)
+                    existingUsage.UnitCostPrice = part.CostPrice;
+                    existingUsage.UnitPrice = part.Price;
+                    targetUsage = existingUsage;
+                    _context.PartUsages.Update(existingUsage);
+                }
+                else
+                {
+                    // Ensure prices are set from DB (already verified above)
+                    partUsage.UnitCostPrice = part.CostPrice;
+                    partUsage.UnitPrice = part.Price;
+                    _context.PartUsages.Add(partUsage);
+                    targetUsage = partUsage;
+                }
 
                 // 2. Deduct stock from Part
                 part.QuantityInStock -= partUsage.QuantityUsed;
@@ -71,14 +104,14 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 await transaction.CommitAsync();
 
                 // Load navigation properties for return
-                await _context.Entry(partUsage)
+                await _context.Entry(targetUsage)
                     .Reference(pu => pu.Part)
                     .LoadAsync();
-                await _context.Entry(partUsage)
+                await _context.Entry(targetUsage)
                     .Reference(pu => pu.History)
                     .LoadAsync();
 
-                return partUsage;
+                return targetUsage;
             }
             catch
             {

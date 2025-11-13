@@ -35,10 +35,10 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             _logger = logger;
         }
 
-        private static DateTime GetVietNamTime(DateTime utcTime)
-        {
-            return utcTime.ConvertToVietnamTime();
-        }
+        // private static DateTime GetVietNamTime(DateTime utcTime)
+        // {
+        //     return utcTime.ConvertToVietnamTime();
+        // }
 
         [HttpPost("webhook")]
         [AllowAnonymous]
@@ -110,14 +110,6 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 }
 
                 DateTime paymentDateTime = DateTime.Parse(webhookData.transactionDateTime);
-                if (paymentDateTime.Kind == DateTimeKind.Unspecified)
-                {
-                    paymentDateTime = DateTime.SpecifyKind(paymentDateTime, DateTimeKind.Utc);
-                }
-                else if (paymentDateTime.Kind == DateTimeKind.Local)
-                {
-                    paymentDateTime = paymentDateTime.ToUniversalTime();
-                }
 
                 Payment payment;
                 string paymentType;
@@ -203,8 +195,8 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                                 ? $"{workOrder.Vehicle.Model ?? "N/A"} ({workOrder.Vehicle.Plate ?? "N/A"})"
                                 : "N/A";
 
-                            string appointmentDate = GetVietNamTime(workOrder.Appointment.AppointmentDate).ToString("dd/MM/yyyy HH:mm");
-                            string paymentDateFormatted = paymentDateTime.ConvertToVietnamTime().ToString("dd/MM/yyyy HH:mm:ss");
+                            string appointmentDate = workOrder.Appointment.AppointmentDate.ToString("dd/MM/yyyy HH:mm");
+                            string paymentDateFormatted = paymentDateTime.ToString("dd/MM/yyyy HH:mm:ss");
 
                             // Get customer name and email
                             string customerName = workOrder.Customer?.FullName ?? "Khách hàng";
@@ -295,7 +287,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                                 ? $"{workOrder.Vehicle.Model ?? "N/A"} ({workOrder.Vehicle.Plate ?? "N/A"})"
                                 : "N/A";
 
-                            string paymentDateFormatted = paymentDateTime.ConvertToVietnamTime().ToString("dd/MM/yyyy HH:mm:ss");
+                            string paymentDateFormatted = paymentDateTime.ToString("dd/MM/yyyy HH:mm:ss");
 
                             // Get customer name and email
                             string customerName = workOrder.Customer?.FullName ?? "Khách hàng";
