@@ -56,7 +56,6 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             if (token != null)
             {
                 token.IsUsed = true;
-                token.UpdatedAt = DateTime.UtcNow;
                 await UpdateTokenAsync(token);
             }
         }
