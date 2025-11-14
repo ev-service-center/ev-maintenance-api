@@ -119,7 +119,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 }
 
                 // Update status
-                existingAppointmentService.Status = dto.Status;
+                existingAppointmentService.Status = dto.Status.ToString();
 
                 var updatedAppointmentService = await _appointmentServiceDao.UpdateAppointmentServiceAsync(existingAppointmentService);
 
@@ -252,7 +252,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 if (dto.ServiceId.HasValue) existingAppointmentService.ServiceId = dto.ServiceId.Value;
                 if (dto.Price.HasValue) existingAppointmentService.Price = dto.Price.Value;
                 if (dto.AssignedTechnicianId.HasValue) existingAppointmentService.AssignedTechnicianId = dto.AssignedTechnicianId.Value;
-                if (dto.Status != null) existingAppointmentService.Status = dto.Status;
+                if (dto.Status.HasValue) existingAppointmentService.Status = dto.Status.Value.ToString();
 
                 var updatedAppointmentService = await _appointmentServiceDao.UpdateAppointmentServiceAsync(existingAppointmentService);
 
