@@ -400,10 +400,24 @@ namespace EVServiceCenterMaintenanceAPI.Utils
         .payment-success-text { font-size: 18px; font-weight: 600; color: #155724; margin-bottom: 10px; }
         .payment-details { margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: left; }
         .payment-details h3 { color: #1a2b49; font-size: 16px; margin-bottom: 15px; font-weight: 600; }
+        /* OLD CSS - Gmail không hỗ trợ flexbox tốt
         .payment-details-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e0e4e8; }
         .payment-details-row:last-child { border-bottom: none; }
         .payment-details-label { color: #6c757d; font-size: 14px; font-weight: 500; }
         .payment-details-value { color: #1a2b49; font-size: 14px; font-weight: 600; }
+        */
+        /* NEW CSS - Inline-block (tạm thời, có thể rollback)
+        .payment-details-row { padding: 10px 0; border-bottom: 1px solid #e0e4e8; }
+        .payment-details-row:last-child { border-bottom: none; }
+        .payment-details-label { color: #6c757d; font-size: 14px; font-weight: 500; display: inline-block; width: 50%; vertical-align: top; }
+        .payment-details-value { color: #1a2b49; font-size: 14px; font-weight: 600; display: inline-block; width: 50%; text-align: right; vertical-align: top; }
+        */
+        /* NEWEST CSS - Table layout (tốt nhất cho Gmail) */
+        .payment-details-table { width: 100%; border-collapse: collapse; }
+        .payment-details-row { border-bottom: 1px solid #e0e4e8; }
+        .payment-details-row:last-child { border-bottom: none; }
+        .payment-details-label { color: #6c757d; font-size: 14px; font-weight: 500; padding: 10px 0; }
+        .payment-details-value { color: #1a2b49; font-size: 14px; font-weight: 600; padding: 10px 0; text-align: right; }
         .amount-highlight { font-size: 24px; color: #007bff; font-weight: 700; }
         .appointment-info { margin: 20px 0; padding: 15px; background: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 8px; text-align: left; }
         .appointment-info h3 { color: #1565c0; font-size: 14px; margin-bottom: 8px; font-weight: 600; }
@@ -422,8 +436,22 @@ namespace EVServiceCenterMaintenanceAPI.Utils
             .content { padding: 20px; }
             .header img { width: 80px; }
             .header h1 { font-size: 20px; }
+            /* OLD CSS - Comment lại
             .payment-details-row { flex-direction: column; }
             .payment-details-value { margin-top: 5px; }
+            */
+            /* NEW CSS - Inline-block (comment lại)
+            .payment-details-label { width: 100%; display: block; margin-bottom: 5px; }
+            .payment-details-value { width: 100%; display: block; text-align: left; margin-top: 5px; }
+            */
+            /* NEWEST CSS - Table layout cho mobile */
+            .payment-details-table, .total-amount-table { width: 100% !important; }
+            .payment-details-label, .payment-details-value, .total-amount-label, .total-amount-value { 
+                display: block !important; 
+                width: 100% !important; 
+                text-align: left !important; 
+                padding: 5px 0 !important; 
+            }
         }
     </style>
 </head>
@@ -445,6 +473,7 @@ namespace EVServiceCenterMaintenanceAPI.Utils
             </div>
             <div class='payment-details'>
                 <h3>Chi tiết thanh toán</h3>
+                <!-- OLD HTML - Div layout (comment để rollback)
                 <div class='payment-details-row'>
                     <span class='payment-details-label'>Số tiền đã thanh toán:</span>
                     <span class='payment-details-value amount-highlight'>" + depositAmount.ToString("N0") + @" VNĐ</span>
@@ -469,6 +498,34 @@ namespace EVServiceCenterMaintenanceAPI.Utils
                     <span class='payment-details-label'>Phương thức:</span>
                     <span class='payment-details-value'>PayOS</span>
                 </div>
+                -->
+                <!-- NEW HTML - Table layout (tốt nhất cho Gmail) -->
+                <table class='payment-details-table'>
+                    <tr class='payment-details-row'>
+                        <td class='payment-details-label'>Số tiền đã thanh toán:</td>
+                        <td class='payment-details-value amount-highlight'>" + depositAmount.ToString("N0") + @" VNĐ</td>
+                    </tr>
+                    <tr class='payment-details-row'>
+                        <td class='payment-details-label'>Mã đơn hàng:</td>
+                        <td class='payment-details-value'>" + workOrderId.ToString("D6") + @"</td>
+                    </tr>
+                    <tr class='payment-details-row'>
+                        <td class='payment-details-label'>Mã giao dịch:</td>
+                        <td class='payment-details-value'>" + transactionId + @"</td>
+                    </tr>
+                    <tr class='payment-details-row'>
+                        <td class='payment-details-label'>Mã đơn hàng PayOS:</td>
+                        <td class='payment-details-value'>" + orderCode + @"</td>
+                    </tr>
+                    <tr class='payment-details-row'>
+                        <td class='payment-details-label'>Ngày thanh toán:</td>
+                        <td class='payment-details-value'>" + paymentDate + @"</td>
+                    </tr>
+                    <tr class='payment-details-row'>
+                        <td class='payment-details-label'>Phương thức:</td>
+                        <td class='payment-details-value'>PayOS</td>
+                    </tr>
+                </table>
             </div>
             <div class='appointment-info'>
                 <h3>Thông tin cuộc hẹn</h3>
@@ -531,15 +588,40 @@ namespace EVServiceCenterMaintenanceAPI.Utils
         .invoice-status { display: inline-block; padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; margin: 10px 0; background: " + statusColor + @"; color: #ffffff; }
         .payment-details { margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: left; }
         .payment-details h3 { color: #1a2b49; font-size: 16px; margin-bottom: 15px; font-weight: 600; }
+        /* OLD CSS - Gmail không hỗ trợ flexbox tốt, comment lại để rollback nếu cần
         .payment-details-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e0e4e8; }
         .payment-details-row:last-child { border-bottom: none; }
         .payment-details-label { color: #6c757d; font-size: 14px; font-weight: 500; }
         .payment-details-value { color: #1a2b49; font-size: 14px; font-weight: 600; }
+        */
+        /* NEW CSS - Inline-block (tạm thời, có thể rollback)
+        .payment-details-row { padding: 10px 0; border-bottom: 1px solid #e0e4e8; }
+        .payment-details-row:last-child { border-bottom: none; }
+        .payment-details-label { color: #6c757d; font-size: 14px; font-weight: 500; display: inline-block; width: 50%; vertical-align: top; }
+        .payment-details-value { color: #1a2b49; font-size: 14px; font-weight: 600; display: inline-block; width: 50%; text-align: right; vertical-align: top; }
+        */
+        /* NEWEST CSS - Table layout (tốt nhất cho Gmail) */
+        .payment-details-table { width: 100%; border-collapse: collapse; }
+        .payment-details-row { border-bottom: 1px solid #e0e4e8; }
+        .payment-details-row:last-child { border-bottom: none; }
+        .payment-details-label { color: #6c757d; font-size: 14px; font-weight: 500; padding: 10px 0; }
+        .payment-details-value { color: #1a2b49; font-size: 14px; font-weight: 600; padding: 10px 0; text-align: right; }
         .amount-highlight { font-size: 24px; color: #28a745; font-weight: 700; }
         .total-amount { background: #e3f2fd; padding: 15px; border-radius: 8px; margin: 15px 0; }
+        /* OLD CSS - Comment lại
         .total-amount-row { display: flex; justify-content: space-between; padding: 8px 0; }
-        .total-amount-label { font-size: 16px; font-weight: 600; color: #1a2b49; }
-        .total-amount-value { font-size: 20px; font-weight: 700; color: #007bff; }
+        */
+        /* NEW CSS - Inline-block (comment lại)
+        .total-amount-row { padding: 8px 0; }
+        .total-amount-label { font-size: 16px; font-weight: 600; color: #1a2b49; display: inline-block; width: 50%; vertical-align: top; }
+        .total-amount-value { font-size: 20px; font-weight: 700; color: #007bff; display: inline-block; width: 50%; text-align: right; vertical-align: top; }
+        */
+        /* NEWEST CSS - Table layout cho total-amount */
+        .total-amount-table { width: 100%; border-collapse: collapse; }
+        .total-amount-row { border-bottom: 1px solid #e0e4e8; }
+        .total-amount-row:last-child { border-bottom: none; }
+        .total-amount-label { font-size: 16px; font-weight: 600; color: #1a2b49; padding: 8px 0; }
+        .total-amount-value { font-size: 20px; font-weight: 700; color: #007bff; padding: 8px 0; text-align: right; }
         .summary-info { margin: 20px 0; padding: 15px; background: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 8px; text-align: left; }
         .summary-info h3 { color: #1565c0; font-size: 14px; margin-bottom: 8px; font-weight: 600; }
         .summary-info p { color: #4a5b6c; font-size: 13px; margin-bottom: 5px; }
@@ -554,8 +636,22 @@ namespace EVServiceCenterMaintenanceAPI.Utils
             .content { padding: 20px; }
             .header img { width: 80px; }
             .header h1 { font-size: 20px; }
+            /* OLD CSS - Comment lại
             .payment-details-row { flex-direction: column; }
             .payment-details-value { margin-top: 5px; }
+            */
+            /* NEW CSS - Inline-block (comment lại)
+            .payment-details-label { width: 100%; display: block; margin-bottom: 5px; }
+            .payment-details-value { width: 100%; display: block; text-align: left; margin-top: 5px; }
+            */
+            /* NEWEST CSS - Table layout cho mobile */
+            .payment-details-table, .total-amount-table { width: 100% !important; }
+            .payment-details-label, .payment-details-value, .total-amount-label, .total-amount-value { 
+                display: block !important; 
+                width: 100% !important; 
+                text-align: left !important; 
+                padding: 5px 0 !important; 
+            }
         }
     </style>
 </head>
@@ -578,6 +674,7 @@ namespace EVServiceCenterMaintenanceAPI.Utils
             </div>
             <div class='payment-details'>
                 <h3>Chi tiết thanh toán lần này</h3>
+                <!-- OLD HTML - Div layout (comment để rollback)
                 <div class='payment-details-row'>
                     <span class='payment-details-label'>Số tiền thanh toán:</span>
                     <span class='payment-details-value amount-highlight'>" + finalAmount.ToString("N0") + @" VNĐ</span>
@@ -606,8 +703,41 @@ namespace EVServiceCenterMaintenanceAPI.Utils
                     <span class='payment-details-label'>Phương thức:</span>
                     <span class='payment-details-value'>PayOS</span>
                 </div>
+                -->
+                <!-- NEW HTML - Table layout (tốt nhất cho Gmail) -->
+                <table class='payment-details-table'>
+                    <tr class='payment-details-row'>
+                        <td class='payment-details-label'>Số tiền thanh toán:</td>
+                        <td class='payment-details-value amount-highlight'>" + finalAmount.ToString("N0") + @" VNĐ</td>
+                    </tr>
+                    <tr class='payment-details-row'>
+                        <td class='payment-details-label'>Mã hóa đơn:</td>
+                        <td class='payment-details-value'>" + invoiceId.ToString("D6") + @"</td>
+                    </tr>
+                    <tr class='payment-details-row'>
+                        <td class='payment-details-label'>Mã đơn hàng:</td>
+                        <td class='payment-details-value'>" + workOrderId.ToString("D6") + @"</td>
+                    </tr>
+                    <tr class='payment-details-row'>
+                        <td class='payment-details-label'>Mã giao dịch:</td>
+                        <td class='payment-details-value'>" + transactionId + @"</td>
+                    </tr>
+                    <tr class='payment-details-row'>
+                        <td class='payment-details-label'>Mã đơn hàng PayOS:</td>
+                        <td class='payment-details-value'>" + orderCode + @"</td>
+                    </tr>
+                    <tr class='payment-details-row'>
+                        <td class='payment-details-label'>Ngày thanh toán:</td>
+                        <td class='payment-details-value'>" + paymentDate + @"</td>
+                    </tr>
+                    <tr class='payment-details-row'>
+                        <td class='payment-details-label'>Phương thức:</td>
+                        <td class='payment-details-value'>PayOS</td>
+                    </tr>
+                </table>
             </div>
             <div class='total-amount'>
+                <!-- OLD HTML - Div layout (comment để rollback)
                 <div class='total-amount-row'>
                     <span class='total-amount-label'>Tổng tiền hóa đơn:</span>
                     <span class='total-amount-value'>" + totalAmount.ToString("N0") + @" VNĐ</span>
@@ -621,6 +751,23 @@ namespace EVServiceCenterMaintenanceAPI.Utils
                     <span class='total-amount-label'>Còn lại:</span>
                     <span class='total-amount-value' style='color: #ff9800;'>" + remainingAmount + @" VNĐ</span>
                 </div>" : "") + @"
+                -->
+                <!-- NEW HTML - Table layout (tốt nhất cho Gmail) -->
+                <table class='total-amount-table'>
+                    <tr class='total-amount-row'>
+                        <td class='total-amount-label'>Tổng tiền hóa đơn:</td>
+                        <td class='total-amount-value'>" + totalAmount.ToString("N0") + @" VNĐ</td>
+                    </tr>
+                    <tr class='total-amount-row'>
+                        <td class='total-amount-label'>Đã thanh toán:</td>
+                        <td class='total-amount-value'>" + totalPaid.ToString("N0") + @" VNĐ</td>
+                    </tr>" +
+                    (invoiceStatus == "PartiallyPaid" ? @"
+                    <tr class='total-amount-row'>
+                        <td class='total-amount-label'>Còn lại:</td>
+                        <td class='total-amount-value' style='color: #ff9800;'>" + remainingAmount + @" VNĐ</td>
+                    </tr>" : "") + @"
+                </table>
             </div>
             <div class='summary-info'>
                 <h3>Thông tin dịch vụ</h3>
