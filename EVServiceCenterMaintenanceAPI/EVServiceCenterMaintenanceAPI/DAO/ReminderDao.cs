@@ -114,6 +114,29 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             }
         }
 
+        public async Task<Reminder> UpdateMarkReminderAsync(Reminder reminder)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var existingReminder = await _context.Reminders.FirstOrDefaultAsync(r => r.ReminderId == reminder.ReminderId);
+                if (existingReminder == null)
+                    throw new Exception($"Reminder with ID {reminder.ReminderId} not found.");
+                var currentDate = DateTime.UtcNow;
+                existingReminder.UpdatedAt = currentDate;
+                existingReminder.Sent = true;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return existingReminder;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception($"Failed to update reminder with ID {reminder.ReminderId}.", ex);
+            }
+        }
+
         public async Task<bool> DeleteReminderAsync(int reminderId)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
@@ -133,6 +156,14 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 await transaction.RollbackAsync();
                 throw new Exception($"Failed to delete reminder with ID {reminderId}.", ex);
             }
+        }
+
+        public async Task<List<Reminder>> GetRemindersNeedToSendAsync()
+        {
+            return await _context.Reminders
+                .Where(r => r.Sent == false)
+                .OrderBy(r => r.ReminderDate)
+                .ToListAsync();
         }
 
         public async Task GenerateRemindersForVehicleAsync(int vehicleId)
