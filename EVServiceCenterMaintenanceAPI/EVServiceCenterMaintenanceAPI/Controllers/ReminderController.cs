@@ -211,5 +211,20 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
             }
         }
+
+        [HttpPost("generate/vehicle/{vehicleId}")]
+        [Authorize(Roles = "Staff,Admin")]
+        public async Task<IActionResult> GenerateRemindersForVehicle(int vehicleId)
+        {
+            try
+            {
+                await _reminderDao.GenerateRemindersForVehicleAsync(vehicleId);
+                return Ok(new ApiResponse<object>(200, "Success", "Reminders generated successfully."));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
     }
 }
