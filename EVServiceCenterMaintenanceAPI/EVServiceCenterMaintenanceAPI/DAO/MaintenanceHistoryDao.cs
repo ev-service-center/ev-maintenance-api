@@ -35,6 +35,10 @@ namespace EVServiceCenterMaintenanceAPI.DAO
         public async Task<MaintenanceHistory?> GetMaintenanceHistoryByIdAsync(int historyId)
         {
             return await _context.MaintenanceHistories
+                .Include(h => h.Service)
+                .Include(h => h.Vehicle)
+                .Include(h => h.WorkOrder)
+                    .ThenInclude(wo => wo!.Customer)
                 .Include(h => h.PartUsages)
                     .ThenInclude(pu => pu.Part)
                 .FirstOrDefaultAsync(h => h.HistoryId == historyId);

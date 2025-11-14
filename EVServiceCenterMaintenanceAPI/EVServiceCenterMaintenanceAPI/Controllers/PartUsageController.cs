@@ -2,6 +2,8 @@ using EVServiceCenterMaintenanceAPI.DAO;
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Enums;
 using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Services;
+using EVServiceCenterMaintenanceAPI.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,14 +19,16 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         private readonly EvserviceCenterDbContext _context;
         private readonly UserDao _userDao;
         private readonly EmployeeDao _employeeDao;
+        private readonly EmailService _emailService;
         private readonly ILogger<PartUsageController> _logger;
 
-        public PartUsageController(PartUsageDao partUsageDao, EvserviceCenterDbContext context, UserDao userDao, EmployeeDao employeeDao, ILogger<PartUsageController> logger)
+        public PartUsageController(PartUsageDao partUsageDao, EvserviceCenterDbContext context, UserDao userDao, EmployeeDao employeeDao, EmailService emailService, ILogger<PartUsageController> logger)
         {
             _partUsageDao = partUsageDao;
             _context = context;
             _userDao = userDao;
             _employeeDao = employeeDao;
+            _emailService = emailService;
             _logger = logger;
         }
 
@@ -127,6 +131,165 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     createdPartUsage.QuantityUsed,
                     responseDto.TotalPrice,
                     message.Contains("LOW") ? $"WARNING: {message}" : "");
+
+                // Check if should send email notification (after PartUsage is created)
+                // Get the maintenance history to check workorder
+                var maintenanceHistory = await _context.MaintenanceHistories
+                    .Include(mh => mh.WorkOrder)
+                        .ThenInclude(wo => wo!.Customer)
+                    .FirstOrDefaultAsync(mh => mh.HistoryId == dto.HistoryId);
+
+                if (maintenanceHistory?.WorkOrderId.HasValue == true)
+                {
+                    var customerEmail = maintenanceHistory.WorkOrder?.Customer?.Email;
+                    if (!string.IsNullOrEmpty(customerEmail))
+                    {
+                        // Get all services in this workorder
+                        var workOrderServices = await _context.AppointmentServices
+                            .Where(aps => aps.WorkOrderId == maintenanceHistory.WorkOrderId.Value)
+                            .Select(aps => aps.ServiceId)
+                            .Distinct()
+                            .ToListAsync();
+
+                        // Get all services that already have maintenance history for this workorder
+                        var servicesWithHistory = await _context.MaintenanceHistories
+                            .Where(mh => mh.WorkOrderId == maintenanceHistory.WorkOrderId.Value)
+                            .Select(mh => mh.ServiceId)
+                            .Distinct()
+                            .ToListAsync();
+
+                        // Only send email if all services have maintenance history
+                        if (workOrderServices.Count > 0 && workOrderServices.All(serviceId => servicesWithHistory.Contains(serviceId)))
+                        {
+                            // Get all maintenance histories for this workorder to send comprehensive email
+                            var allHistories = await _context.MaintenanceHistories
+                                .Where(mh => mh.WorkOrderId == maintenanceHistory.WorkOrderId.Value)
+                                .Include(mh => mh.Service)
+                                .Include(mh => mh.Vehicle)
+                                .Include(mh => mh.WorkOrder)
+                                    .ThenInclude(wo => wo!.Customer)
+                                .Include(mh => mh.WorkOrder)
+                                    .ThenInclude(wo => wo!.Center)
+                                .Include(mh => mh.PartUsages)
+                                    .ThenInclude(pu => pu.Part)
+                                .ToListAsync();
+
+                            var allHistoriesDto = allHistories.Select(h =>
+                            {
+                                // Calculate Cost if null or 0: Service.BasePrice + PartUsages.TotalPrice
+                                decimal? calculatedCost = h.Cost;
+                                if (!h.Cost.HasValue || h.Cost.Value == 0)
+                                {
+                                    decimal serviceCost = h.Service?.BasePrice ?? 0;
+                                    decimal partsCost = h.PartUsages?.Sum(pu => pu.UnitPrice * pu.QuantityUsed) ?? 0;
+                                    calculatedCost = serviceCost + partsCost;
+                                }
+
+                                return new MaintenanceHistoryResponseDto
+                                {
+                                    HistoryId = h.HistoryId,
+                                    VehicleId = h.VehicleId,
+                                    WorkOrderId = h.WorkOrderId,
+                                    ServiceId = h.ServiceId ?? 0,
+                                    MaintenanceDate = h.MaintenanceDate,
+                                    Description = h.Description,
+                                    Notes = h.Notes,
+                                    Cost = calculatedCost,
+                                    MileageAtMaintenance = h.MileageAtMaintenance,
+                                    CreatedAt = h.CreatedAt,
+                                    UpdatedAt = h.UpdatedAt,
+                                    ServiceDetails = h.Service == null ? null : new ServiceResponseDto
+                                    {
+                                        ServiceId = h.Service.ServiceId,
+                                        ServiceName = h.Service.ServiceName,
+                                        Description = h.Service.Description,
+                                        BasePrice = h.Service.BasePrice,
+                                        EstimatedTime = h.Service.EstimatedTime,
+                                        Status = Enum.Parse<ServiceStatus>(h.Service.Status),
+                                        ReminderIntervalDays = h.Service.ReminderIntervalDays ?? 0,
+                                        ReminderMileage = h.Service.ReminderMileage ?? 0,
+                                        Notes = h.Service.Notes,
+                                        CreatedAt = h.Service.CreatedAt,
+                                        UpdatedAt = h.Service.UpdatedAt
+                                    },
+                                    VehicleDetails = h.Vehicle == null ? null : new VehicleResponeDto
+                                    {
+                                        VehicleId = h.Vehicle.VehicleId,
+                                        CustomerId = h.Vehicle.CustomerId,
+                                        Model = h.Vehicle.Model,
+                                        VIN = h.Vehicle.Vin,
+                                        ManufactureYear = h.Vehicle.ManufactureYear,
+                                        CurrentMileage = h.Vehicle.CurrentMileage ?? 0,
+                                        LastMaintenanceDate = h.Vehicle.LastMaintenanceDate,
+                                        Color = h.Vehicle.Color,
+                                        Plate = h.Vehicle.Plate,
+                                        CreatedAt = h.Vehicle.CreatedAt,
+                                        UpdatedAt = h.Vehicle.UpdatedAt
+                                    },
+                                    WorkOrderDetails = h.WorkOrder == null ? null : new WorkOrderResponseDto
+                                    {
+                                        WorkOrderId = h.WorkOrder.WorkOrderId,
+                                        CenterId = h.WorkOrder.CenterId,
+                                        CustomerId = h.WorkOrder.CustomerId,
+                                        VehicleId = h.WorkOrder.VehicleId,
+                                        CreatedByStaffId = h.WorkOrder.CreatedByStaffId,
+                                        AppointmentId = h.WorkOrder.AppointmentId,
+                                        Status = Enum.Parse<WorkOrderStatus>(h.WorkOrder.Status),
+                                        CheckInAt = h.WorkOrder.CheckInAt,
+                                        CheckOutAt = h.WorkOrder.CheckOutAt,
+                                        OdometerKm = h.WorkOrder.OdometerKm,
+                                        Notes = h.WorkOrder.Notes,
+                                        CenterDetails = h.WorkOrder.Center == null ? null : new ServiceCenterResponseDto
+                                        {
+                                            CenterId = h.WorkOrder.Center.CenterId,
+                                            CenterName = h.WorkOrder.Center.CenterName,
+                                            Address = h.WorkOrder.Center.Address,
+                                            Phone = h.WorkOrder.Center.Phone,
+                                            Email = h.WorkOrder.Center.Email,
+                                            Status = Enum.Parse<ServiceCenterStatus>(h.WorkOrder.Center.Status)
+                                        },
+                                        CustomerDetails = h.WorkOrder.Customer == null ? null : new UserResponseDto
+                                        {
+                                            UserId = h.WorkOrder.Customer.UserId,
+                                            FullName = h.WorkOrder.Customer.FullName,
+                                            Email = h.WorkOrder.Customer.Email,
+                                            Phone = h.WorkOrder.Customer.Phone,
+                                            Status = Enum.Parse<UserStatus>(h.WorkOrder.Customer.Status)
+                                        }
+                                    },
+                                    PartUsageDetails = h.PartUsages?.Select(pu =>
+                                    {
+                                        var totalCost = pu.UnitCostPrice * pu.QuantityUsed;
+                                        var totalPrice = pu.UnitPrice * pu.QuantityUsed;
+                                        var profit = totalPrice - totalCost;
+                                        var profitMargin = totalPrice > 0 ? Math.Round(profit / totalPrice * 100, 2) : 0;
+
+                                        return new PartUsageResponseDto
+                                        {
+                                            UsageId = pu.UsageId,
+                                            HistoryId = pu.HistoryId,
+                                            PartId = pu.PartId,
+                                            QuantityUsed = pu.QuantityUsed,
+                                            UnitCostPrice = pu.UnitCostPrice,
+                                            UnitPrice = pu.UnitPrice,
+                                            PartName = pu.Part?.PartName,
+                                            PartDescription = pu.Part?.Description,
+                                            TotalCost = totalCost,
+                                            TotalPrice = totalPrice,
+                                            Profit = profit,
+                                            ProfitMargin = profitMargin,
+                                            WorkOrderId = h.WorkOrderId,
+                                            VehicleId = h.VehicleId
+                                        };
+                                    }).ToList()
+                                };
+                            }).ToList();
+
+                            // Send email with all maintenance histories (fire and forget - non-blocking)
+                            TaskHelper.FireAndForget(allHistoriesDto, customerEmail, _emailService.SendMaintenanceHistoriesCreatedEmailAsync);
+                        }
+                    }
+                }
 
                 return CreatedAtAction(
                     nameof(GetPartUsage),
