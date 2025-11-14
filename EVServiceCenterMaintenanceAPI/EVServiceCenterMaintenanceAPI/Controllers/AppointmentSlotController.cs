@@ -4,6 +4,7 @@ using EVServiceCenterMaintenanceAPI.Enums;
 using EVServiceCenterMaintenanceAPI.Helpers;
 using EVServiceCenterMaintenanceAPI.Models;
 using EVServiceCenterMaintenanceAPI.Params;
+using EVServiceCenterMaintenanceAPI.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,17 +18,23 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         private readonly ServiceCenterDao _serviceCenterDao;
         private readonly UserDao _userDao;
         private readonly EmployeeDao _employeeDao;
+        private readonly AppointmentSlotGeneratorService _slotGenerator;
+        private readonly ILogger<AppointmentSlotController> _logger;
 
         public AppointmentSlotController(
             AppointmentSlotDao appointmentSlotDao,
             ServiceCenterDao serviceCenterDao,
             UserDao userDao,
-            EmployeeDao employeeDao)
+            EmployeeDao employeeDao,
+            AppointmentSlotGeneratorService slotGenerator,
+            ILogger<AppointmentSlotController> logger)
         {
             _appointmentSlotDao = appointmentSlotDao;
             _serviceCenterDao = serviceCenterDao;
             _userDao = userDao;
             _employeeDao = employeeDao;
+            _slotGenerator = slotGenerator;
+            _logger = logger;
         }
 
         private async Task<(bool Success, User? User, IActionResult? ErrorResponse)> GetCurrentUserAsync()
@@ -378,6 +385,58 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpPost("generate/day")]
+        [Authorize(Roles = "Staff,Admin")]
+        public async Task<IActionResult> GenerateSlotsForDay([FromQuery] int centerId, [FromQuery] string date)
+        {
+            try
+            {
+                // Validate CenterId exists
+                var centerError = await ValidateCenterExistsAsync(centerId);
+                if (centerError != null) return centerError;
+
+                // Parse date
+                if (!DateTime.TryParse(date, out var targetDate))
+                {
+                    return BadRequest(new ApiResponse<string>(
+                        400,
+                        "Bad Request",
+                        "Định dạng ngày không hợp lệ. Vui lòng dùng format: yyyy-MM-dd (ví dụ: 2024-01-15)"
+                    ));
+                }
+
+                // Get current user and validate authorization
+                var (success, currentUser, errorResponse) = await GetCurrentUserAsync();
+                if (!success) return errorResponse!;
+
+                // Staff can only create slots for their own center
+                var (authSuccess, _, authError) = await ValidateStaffOrTechnicianAccessAsync(currentUser!, centerId, "create slots for");
+                if (!authSuccess) return authError!;
+
+                _logger.LogInformation("User {userId} đang tạo slot cho trung tâm {centerId} ngày {date}...",
+                    currentUser!.UserId, centerId, targetDate.ToString("yyyy-MM-dd"));
+
+                await _slotGenerator.GenerateSlotsForDateAndCenterAsync(targetDate, centerId);
+
+                return Ok(new ApiResponse<string>(
+                    200,
+                    "Success",
+                    $"Đã tạo slot thành công cho trung tâm {centerId} ngày {targetDate:yyyy-MM-dd} ({targetDate.DayOfWeek})",
+                    null,
+                    "Kiểm tra logs để xem chi tiết số lượng slot đã tạo"
+                ));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi tạo slot cho trung tâm {centerId} ngày {date}", centerId, date);
+                return StatusCode(500, new ApiResponse<string>(
+                    500,
+                    "Error",
+                    $"Lỗi khi tạo slot: {ex.Message}"
+                ));
             }
         }
     }

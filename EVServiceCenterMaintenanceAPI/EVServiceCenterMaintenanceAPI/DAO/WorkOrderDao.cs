@@ -16,6 +16,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
         public async Task<WorkOrder> CreateWorkOrderAsync(WorkOrder workOrder, List<int> serviceIds)
         {
+            using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
                 workOrder.CheckInAt = DateTime.UtcNow;
@@ -60,8 +61,11 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                         };
                         _context.AppointmentServices.Add(appointmentService);
                     }
-                    await _context.SaveChangesAsync();
                 }
+
+                await _context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
 
                 var result = await _context.WorkOrders
                     .Include(wo => wo.Center)
@@ -76,6 +80,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             }
             catch
             {
+                await transaction.RollbackAsync();
                 throw;
             }
         }
