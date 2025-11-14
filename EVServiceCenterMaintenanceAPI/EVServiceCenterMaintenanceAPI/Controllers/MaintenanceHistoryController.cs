@@ -174,17 +174,19 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 if (validationError != null)
                     return validationError;
 
-                // Check for duplicate maintenance history
+                // Check for duplicate maintenance history within the SAME WorkOrder
+                // Allow duplicate service if it's from a different WorkOrder (customer books again)
                 var recentHistory = await _context.MaintenanceHistories
                     .Where(h => h.VehicleId == dto.VehicleId &&
                                 h.ServiceId == dto.ServiceId &&
+                                h.WorkOrderId == dto.WorkOrderId &&
                                 h.MaintenanceDate >= dto.MaintenanceDate.AddHours(-24) &&
                                 h.MaintenanceDate <= dto.MaintenanceDate.AddHours(24))
                     .FirstOrDefaultAsync();
 
                 if (recentHistory != null)
                     return BadRequest(new ApiResponse<object>(400, "BadRequest",
-                        "A similar maintenance history already exists within 24 hours."));
+                        "A similar maintenance history already exists for this work order within 24 hours."));
                 var history = new MaintenanceHistory
                 {
                     VehicleId = dto.VehicleId,

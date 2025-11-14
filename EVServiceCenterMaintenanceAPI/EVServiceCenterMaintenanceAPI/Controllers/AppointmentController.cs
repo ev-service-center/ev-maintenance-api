@@ -297,6 +297,22 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 var vehicleError = await ValidateVehicleBelongsToCustomerAsync(dto.VehicleId, dto.CustomerId);
                 if (vehicleError != null) return vehicleError;
 
+                // Validation: Vehicle is not busy
+                var isVehicleBusy = await _context.Vehicles
+                    .Where(v => v.VehicleId == dto.VehicleId)
+                    .AnyAsync(v =>
+                        v.Appointments.Any(a =>
+                            a.Status == AppointmentStatus.Pending.ToString() ||
+                            a.Status == AppointmentStatus.Confirmed.ToString() ||
+                            a.Status == AppointmentStatus.InProgress.ToString()) ||
+                        v.WorkOrders.Any(w =>
+                            w.Status == WorkOrderStatus.Pending.ToString() ||
+                            w.Status == WorkOrderStatus.InProgress.ToString()));
+
+                if (isVehicleBusy)
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        "This vehicle is currently busy with an active appointment or work order. Please complete or cancel the existing booking first."));
+
                 // Validation: Service Center is Open
                 var center = await _context.ServiceCenters.FindAsync(dto.CenterId);
                 if (center!.Status != ServiceCenterStatus.Open.ToString())
@@ -440,6 +456,22 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 // Validation: Vehicle belongs to customer
                 var vehicleError = await ValidateVehicleBelongsToCustomerAsync(dto.VehicleId, dto.CustomerId);
                 if (vehicleError != null) return vehicleError;
+
+                // Validation: Vehicle is not busy (no active appointment/workorder)
+                var isVehicleBusy = await _context.Vehicles
+                    .Where(v => v.VehicleId == dto.VehicleId)
+                    .AnyAsync(v =>
+                        v.Appointments.Any(a =>
+                            a.Status == AppointmentStatus.Pending.ToString() ||
+                            a.Status == AppointmentStatus.Confirmed.ToString() ||
+                            a.Status == AppointmentStatus.InProgress.ToString()) ||
+                        v.WorkOrders.Any(w =>
+                            w.Status == WorkOrderStatus.Pending.ToString() ||
+                            w.Status == WorkOrderStatus.InProgress.ToString()));
+
+                if (isVehicleBusy)
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        "This vehicle is currently busy with an active appointment or work order. Please complete or cancel the existing booking first."));
 
                 // Validation: Service Center is Open
                 var center = await _context.ServiceCenters.FindAsync(dto.CenterId);
