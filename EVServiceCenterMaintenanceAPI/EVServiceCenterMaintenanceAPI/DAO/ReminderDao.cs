@@ -81,6 +81,14 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             return (reminders, total);
         }
 
+        public async Task<List<Reminder>> GetRemindersByUserIdAsync(int userId)
+        {
+            return await _context.Reminders
+                .Where(r => r.UserId == userId && r.Sent == false)
+                .OrderBy(r => r.ReminderDate)
+                .ToListAsync();
+        }
+
         public async Task GenerateRemindersForVehicleAsync(int vehicleId)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();

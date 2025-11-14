@@ -120,5 +120,34 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
             }
         }
+
+        [HttpGet("user/{userId}")]
+        [Authorize(Roles = "Customer")]
+        public async Task<IActionResult> GetRemindersByUser(int userId)
+        {
+            try
+            {
+                var reminders = await _reminderDao.GetRemindersByUserIdAsync(userId);
+                var dtos = reminders.Select(r => new ReminderResponseDto
+                {
+                    ReminderId = r.ReminderId,
+                    UserId = r.UserId,
+                    VehicleId = r.VehicleId,
+                    ServiceId = r.ServiceId,
+                    ReminderType = Enum.Parse<ReminderType>(r.ReminderType!),
+                    ReminderDate = r.ReminderDate,
+                    Message = r.Message,
+                    Sent = r.Sent!.Value,
+                    CreatedAt = r.CreatedAt,
+                    UpdatedAt = r.UpdatedAt
+                }).ToList();
+
+                return Ok(new ApiResponse<List<ReminderResponseDto>>(200, "Success", "Reminders retrieved successfully.", data: dtos));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
     }
 }
