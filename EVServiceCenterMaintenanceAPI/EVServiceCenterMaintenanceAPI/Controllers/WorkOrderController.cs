@@ -621,12 +621,8 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                             invoiceId = workOrder.Invoice.InvoiceId;
                         }
 
-                        // Parse payment date and ensure UTC
+                        // Parse payment date 
                         DateTime paymentDateTime = DateTime.Parse(transaction.transactionDateTime);
-                        if (paymentDateTime.Kind == DateTimeKind.Unspecified)
-                        {
-                            paymentDateTime = DateTime.SpecifyKind(paymentDateTime, DateTimeKind.Utc);
-                        }
 
                         var payment = new Payment
                         {
@@ -635,7 +631,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                             Method = "PayOS",
                             Amount = paymentLinkInformation.amountPaid,
                             TransactionId = transaction.reference,
-                            PaymentDate = paymentDateTime.ToUniversalTime(),
+                            PaymentDate = paymentDateTime,
                             PaymentType = paymentType,
                             OrderCode = orderCode.ToString(),
                             CreatedAt = DateTime.UtcNow,
@@ -655,13 +651,8 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                                 ? workOrder.Appointment.Slot.StartTime.ConvertToVietnamTime().ToString("dd/MM/yyyy HH:mm")
                                 : "N/A";
 
-                            // Parse transaction time and convert to Vietnam time
-                            DateTime transactionTime = DateTime.Parse(transaction.transactionDateTime);
-                            if (transactionTime.Kind == DateTimeKind.Unspecified)
-                            {
-                                transactionTime = DateTime.SpecifyKind(transactionTime, DateTimeKind.Utc);
-                            }
-                            string paymentDateFormatted = transactionTime.ToUniversalTime().ConvertToVietnamTime().ToString("dd/MM/yyyy HH:mm:ss");
+                            DateTime transactionTimeVN = DateTime.Parse(transaction.transactionDateTime);
+                            string paymentDateFormatted = transactionTimeVN.ToString("dd/MM/yyyy HH:mm:ss");
 
                             string customerName = workOrder.Customer?.FullName ?? "Khách hàng";
                             string customerEmail = workOrder.Customer!.Email;
