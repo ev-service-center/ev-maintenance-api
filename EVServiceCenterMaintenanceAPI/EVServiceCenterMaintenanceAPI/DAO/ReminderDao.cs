@@ -13,6 +13,11 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             _context = context;
         }
 
+        public async Task<Reminder?> GetReminderByIdAsync(int reminderId)
+        {
+            return await _context.Reminders.FirstOrDefaultAsync(r => r.ReminderId == reminderId);
+        }
+
         public async Task GenerateRemindersForVehicleAsync(int vehicleId)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
