@@ -6,13 +6,21 @@ namespace EVServiceCenterMaintenanceAPI.DTO
     {
         public int PaymentId { get; set; }
         public int? InvoiceId { get; set; }
+        public int? WorkOrderId { get; set; }
         public DateTime? PaymentDate { get; set; }
         public decimal Amount { get; set; }
         public string Method { get; set; } = null!;
         public string? PaymentType { get; set; }  // "Deposit", "Final", "Full"
         public string? TransactionId { get; set; }
+        public string? OrderCode { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+
+        // Additional info from related entities
+        public string? CustomerName { get; set; }
+        public string? CustomerEmail { get; set; }
+        public string? VehiclePlate { get; set; }
+        public string? InvoiceStatus { get; set; }
     }
 
     public class FinalPaymentLinkRequestDto
