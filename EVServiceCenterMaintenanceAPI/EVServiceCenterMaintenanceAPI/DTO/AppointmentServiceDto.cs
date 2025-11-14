@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using EVServiceCenterMaintenanceAPI.Enums;
 
 namespace EVServiceCenterMaintenanceAPI.DTO
 {
@@ -23,13 +24,13 @@ namespace EVServiceCenterMaintenanceAPI.DTO
 
         public int? AssignedTechnicianId { get; set; }
 
-        public string? Status { get; set; }
+        public AppointmentServiceStatus? Status { get; set; }
     }
 
     public class AppointmentServiceUpdateStatusRequestDto
     {
         [Required]
-        public string Status { get; set; } = null!;
+        public AppointmentServiceStatus Status { get; set; }
     }
 
     public class AppointmentServiceAssignTechnicianRequestDto
