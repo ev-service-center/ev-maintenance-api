@@ -76,7 +76,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         }
 
         [HttpGet("{id}")]
-        [Authorize(Roles = "Staff,Admin")]
+        [Authorize(Roles = "Staff,Technician,Admin")]
         public async Task<IActionResult> GetEmployeeById(int id)
         {
             try
@@ -93,14 +93,14 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 if (employee == null)
                     return NotFound(new ApiResponse<EmployeeResponseDto>(404, "NotFound", "Employee not found."));
 
-                if (currentUser.Role == UserRole.Staff.ToString())
+                if (currentUser.Role == UserRole.Staff.ToString() || currentUser.Role == UserRole.Technician.ToString())
                 {
                     var currentEmployee = await _employeeDao.GetEmployeeByIdAsync(currentUserId);
                     if (currentEmployee == null)
-                        return BadRequest(new ApiResponse<object>(400, "BadRequest", "Staff user does not have an associated employee record."));
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", $"{currentUser.Role} user does not have an associated employee record."));
 
                     if (currentEmployee.CenterId != employee.CenterId)
-                        return StatusCode(403, new ApiResponse<object>(403, "Forbidden", "Staff can only view employees in their own service center."));
+                        return StatusCode(403, new ApiResponse<object>(403, "Forbidden", $"{currentUser.Role} can only view employees in their own service center."));
                 }
 
                 var dto = MapEmployeeToDto(employee);
@@ -114,7 +114,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         }
 
         [HttpGet]
-        [Authorize(Roles = "Staff,Admin")]
+        [Authorize(Roles = "Staff,Technician,Admin")]
         public async Task<IActionResult> GetAllEmployees([FromQuery] EmployeeQueryParams queryParams)
         {
             try
@@ -127,15 +127,15 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 if (currentUser == null)
                     return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "User not found."));
 
-                if (currentUser.Role == UserRole.Staff.ToString())
+                if (currentUser.Role == UserRole.Staff.ToString() || currentUser.Role == UserRole.Technician.ToString())
                 {
                     var currentEmployee = await _employeeDao.GetEmployeeByIdAsync(currentUserId);
                     if (currentEmployee == null)
-                        return BadRequest(new ApiResponse<object>(400, "BadRequest", "Staff user does not have an associated employee record."));
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", $"{currentUser.Role} user does not have an associated employee record."));
                     if (queryParams.CenterId.HasValue && queryParams.CenterId.Value != currentEmployee.CenterId)
                     {
                         return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
-                            $"Staff can only query employees from their own service center (Center ID: {currentEmployee.CenterId})."));
+                            $"{currentUser.Role} can only query employees from their own service center (Center ID: {currentEmployee.CenterId})."));
                     }
                     queryParams.CenterId = currentEmployee.CenterId;
                 }
