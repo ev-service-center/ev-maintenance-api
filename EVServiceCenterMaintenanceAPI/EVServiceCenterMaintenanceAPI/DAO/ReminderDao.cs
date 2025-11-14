@@ -114,6 +114,27 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             }
         }
 
+        public async Task<bool> DeleteReminderAsync(int reminderId)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var reminder = await _context.Reminders.FindAsync(reminderId);
+                if (reminder == null)
+                    return false;
+
+                _context.Reminders.Remove(reminder);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception($"Failed to delete reminder with ID {reminderId}.", ex);
+            }
+        }
+
         public async Task GenerateRemindersForVehicleAsync(int vehicleId)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
