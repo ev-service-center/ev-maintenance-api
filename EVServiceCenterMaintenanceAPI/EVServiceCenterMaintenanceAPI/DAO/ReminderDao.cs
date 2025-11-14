@@ -1,5 +1,6 @@
 ﻿using EVServiceCenterMaintenanceAPI.Enums;
 using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.EntityFrameworkCore;
 
 namespace EVServiceCenterMaintenanceAPI.DAO
@@ -35,6 +36,49 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 await transaction.RollbackAsync();
                 throw new Exception("Failed to create reminder.", ex);
             }
+        }
+
+        public async Task<(List<Reminder> Reminders, int Total)> GetAllRemindersAsync(ReminderQueryParams queryParams)
+        {
+            var validation = queryParams.Validate();
+            if (!validation.IsValid)
+            {
+                throw new ArgumentException(validation.ErrorMessage);
+            }
+
+            var query = _context.Reminders.AsQueryable();
+            if (queryParams.ReminderType.HasValue)
+                query = query.Where(r => r.ReminderType == queryParams.ReminderType.ToString());
+            if (queryParams.Sent.HasValue)
+                query = query.Where(r => r.Sent == queryParams.Sent.Value);
+            if (queryParams.UserId.HasValue)
+                query = query.Where(r => r.UserId == queryParams.UserId.Value);
+            if (queryParams.FromDate.HasValue)
+                query = query.Where(r => r.ReminderDate >= queryParams.FromDate.Value);
+            if (queryParams.ToDate.HasValue)
+                query = query.Where(r => r.ReminderDate <= queryParams.ToDate.Value);
+
+            if (!string.IsNullOrEmpty(queryParams.SortBy))
+            {
+                bool isAscending = queryParams.SortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase);
+                switch (queryParams.SortBy.ToLower())
+                {
+                    case "reminderdate":
+                        query = isAscending ? query.OrderBy(r => r.ReminderDate) : query.OrderByDescending(r => r.ReminderDate);
+                        break;
+                    default:
+                        query = isAscending ? query.OrderBy(r => r.ReminderId) : query.OrderByDescending(r => r.ReminderId);
+                        break;
+                }
+            }
+
+            var total = await query.CountAsync();
+            var reminders = await query
+                .Skip((queryParams.Page - 1) * queryParams.PageSize)
+                .Take(queryParams.PageSize)
+                .ToListAsync();
+
+            return (reminders, total);
         }
 
         public async Task GenerateRemindersForVehicleAsync(int vehicleId)

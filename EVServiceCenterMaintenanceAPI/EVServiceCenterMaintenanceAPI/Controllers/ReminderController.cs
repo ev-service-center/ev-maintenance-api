@@ -2,6 +2,7 @@
 using EVServiceCenterMaintenanceAPI.DTO;
 using EVServiceCenterMaintenanceAPI.Enums;
 using EVServiceCenterMaintenanceAPI.Models;
+using EVServiceCenterMaintenanceAPI.Params;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -82,6 +83,37 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 };
 
                 return CreatedAtAction(nameof(GetReminder), new { id = createdReminder.ReminderId }, new ApiResponse<ReminderResponseDto>(201, "Created", "Reminder created successfully.", data: createdDto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpGet]
+        [Authorize(Roles = "Staff,Admin")]
+        public async Task<IActionResult> GetAllReminders([FromQuery] ReminderQueryParams queryParams)
+        {
+            try
+            {
+                var (reminders, total) = await _reminderDao.GetAllRemindersAsync(queryParams);
+
+                var dtos = reminders.Select(r => new ReminderResponseDto
+                {
+                    ReminderId = r.ReminderId,
+                    UserId = r.UserId,
+                    VehicleId = r.VehicleId,
+                    ServiceId = r.ServiceId,
+                    ReminderType = Enum.Parse<ReminderType>(r.ReminderType!),
+                    ReminderDate = r.ReminderDate,
+                    Message = r.Message,
+                    Sent = r.Sent!.Value,
+                    CreatedAt = r.CreatedAt,
+                    UpdatedAt = r.UpdatedAt
+                }).ToList();
+
+                var responseData = new { reminders = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
+                return Ok(new ApiResponse<object>(200, "Success", "Reminders retrieved successfully.", data: responseData));
             }
             catch (Exception ex)
             {
