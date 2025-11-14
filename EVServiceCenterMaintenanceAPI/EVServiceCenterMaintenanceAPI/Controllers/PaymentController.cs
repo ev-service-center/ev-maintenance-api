@@ -712,6 +712,266 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return StatusCode(500, new ApiResponse<object>(500, "InternalServerError", "An error occurred while creating payment link."));
             }
         }
+
+        [HttpGet]
+        [Authorize(Roles = "Admin,Staff")]
+        public async Task<IActionResult> GetAllPayments([FromQuery] PaymentQueryParams queryParams)
+        {
+            try
+            {
+                var validation = queryParams.Validate();
+                if (!validation.IsValid)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", validation.ErrorMessage));
+                }
+
+                var query = _context.Payments
+                    .Include(p => p.WorkOrder)
+                        .ThenInclude(w => w!.Customer)
+                    .Include(p => p.WorkOrder)
+                        .ThenInclude(w => w!.Vehicle)
+                    .Include(p => p.Invoice)
+                    .AsQueryable();
+
+                // Filter by PaymentType
+                if (!string.IsNullOrEmpty(queryParams.PaymentType))
+                    query = query.Where(p => p.PaymentType == queryParams.PaymentType);
+
+                // Filter by Method
+                if (!string.IsNullOrEmpty(queryParams.Method))
+                    query = query.Where(p => p.Method == queryParams.Method);
+
+                // Filter by CustomerId
+                if (queryParams.CustomerId.HasValue)
+                    query = query.Where(p => p.WorkOrder!.CustomerId == queryParams.CustomerId.Value);
+
+                // Filter by WorkOrderId
+                if (queryParams.WorkOrderId.HasValue)
+                    query = query.Where(p => p.WorkOrderId == queryParams.WorkOrderId.Value);
+
+                // Filter by InvoiceId
+                if (queryParams.InvoiceId.HasValue)
+                    query = query.Where(p => p.InvoiceId == queryParams.InvoiceId.Value);
+
+                // Filter by date range
+                if (queryParams.FromDate.HasValue)
+                    query = query.Where(p => p.PaymentDate >= queryParams.FromDate.Value);
+                if (queryParams.ToDate.HasValue)
+                    query = query.Where(p => p.PaymentDate <= queryParams.ToDate.Value);
+
+                // Search by TransactionId or OrderCode
+                if (!string.IsNullOrEmpty(queryParams.Search))
+                    query = query.Where(p => p.TransactionId.Contains(queryParams.Search) ||
+                                            (p.OrderCode != null && p.OrderCode.Contains(queryParams.Search)));
+
+                // Sorting
+                if (!string.IsNullOrEmpty(queryParams.SortBy))
+                {
+                    bool isAscending = queryParams.SortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase);
+                    switch (queryParams.SortBy.ToLower())
+                    {
+                        case "paymentdate":
+                            query = isAscending ? query.OrderBy(p => p.PaymentDate) : query.OrderByDescending(p => p.PaymentDate);
+                            break;
+                        case "amount":
+                            query = isAscending ? query.OrderBy(p => p.Amount) : query.OrderByDescending(p => p.Amount);
+                            break;
+                        case "paymenttype":
+                            query = isAscending ? query.OrderBy(p => p.PaymentType) : query.OrderByDescending(p => p.PaymentType);
+                            break;
+                        case "method":
+                            query = isAscending ? query.OrderBy(p => p.Method) : query.OrderByDescending(p => p.Method);
+                            break;
+                        default:
+                            query = isAscending ? query.OrderBy(p => p.PaymentId) : query.OrderByDescending(p => p.PaymentId);
+                            break;
+                    }
+                }
+                else
+                {
+                    query = query.OrderByDescending(p => p.PaymentDate);
+                }
+
+                var total = await query.CountAsync();
+                var payments = await query
+                    .Skip((queryParams.Page - 1) * queryParams.PageSize)
+                    .Take(queryParams.PageSize)
+                    .ToListAsync();
+
+                var dtos = payments.Select(p => new PaymentResponseDto
+                {
+                    PaymentId = p.PaymentId,
+                    InvoiceId = p.InvoiceId,
+                    WorkOrderId = p.WorkOrderId,
+                    PaymentDate = p.PaymentDate,
+                    Amount = p.Amount,
+                    Method = p.Method,
+                    PaymentType = p.PaymentType,
+                    TransactionId = p.TransactionId,
+                    OrderCode = p.OrderCode,
+                    CreatedAt = p.CreatedAt,
+                    UpdatedAt = p.UpdatedAt,
+                    CustomerName = p.WorkOrder?.Customer?.FullName,
+                    CustomerEmail = p.WorkOrder?.Customer?.Email,
+                    VehiclePlate = p.WorkOrder?.Vehicle?.Plate
+                }).ToList();
+
+                var responseData = new { payments = dtos, total, page = queryParams.Page, pageSize = queryParams.PageSize };
+                return Ok(new ApiResponse<object>(200, "Success", "Payments retrieved successfully.", data: responseData));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting all payments");
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpGet("{id}")]
+        [Authorize]
+        public async Task<IActionResult> GetPaymentById(int id)
+        {
+            try
+            {
+                var payment = await _context.Payments
+                    .Include(p => p.WorkOrder)
+                        .ThenInclude(w => w!.Customer)
+                    .Include(p => p.WorkOrder)
+                        .ThenInclude(w => w!.Vehicle)
+                    .Include(p => p.Invoice)
+                    .FirstOrDefaultAsync(p => p.PaymentId == id);
+
+                if (payment == null)
+                {
+                    return NotFound(new ApiResponse<object>(404, "NotFound", $"Payment with ID {id} not found."));
+                }
+
+                // Authorization check
+                var userIdClaim = User.FindFirst("UserId")?.Value;
+                var userRole = User.FindFirstValue(ClaimTypes.Role);
+
+                // Customer chỉ xem payment của mình
+                if (userRole == UserRole.Customer.ToString() && int.TryParse(userIdClaim, out int userId))
+                {
+                    if (payment.WorkOrder?.CustomerId != userId)
+                    {
+                        return StatusCode(403, new ApiResponse<object>(403, "Forbidden", "You can only view your own payments."));
+                    }
+                }
+
+                var dto = new PaymentResponseDto
+                {
+                    PaymentId = payment.PaymentId,
+                    InvoiceId = payment.InvoiceId,
+                    WorkOrderId = payment.WorkOrderId,
+                    PaymentDate = payment.PaymentDate,
+                    Amount = payment.Amount,
+                    Method = payment.Method,
+                    PaymentType = payment.PaymentType,
+                    TransactionId = payment.TransactionId,
+                    OrderCode = payment.OrderCode,
+                    CreatedAt = payment.CreatedAt,
+                    UpdatedAt = payment.UpdatedAt,
+                    CustomerName = payment.WorkOrder?.Customer?.FullName,
+                    CustomerEmail = payment.WorkOrder?.Customer?.Email,
+                    VehiclePlate = payment.WorkOrder?.Vehicle?.Plate,
+                    InvoiceStatus = payment.Invoice?.Status
+                };
+
+                return Ok(new ApiResponse<PaymentResponseDto>(200, "Success", "Payment retrieved successfully.", data: dto));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting payment {PaymentId}", id);
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpGet("status/{orderCode}")]
+        [Authorize]
+        public async Task<IActionResult> CheckPaymentLinkStatus(long orderCode)
+        {
+            try
+            {
+                // Get WorkOrder by OrderCode
+                var workOrder = await _context.WorkOrders
+                    .Include(w => w.Customer)
+                    .Include(w => w.Vehicle)
+                    .Include(w => w.Appointment)
+                    .Include(w => w.Invoice)
+                    .FirstOrDefaultAsync(w => w.OrderCode == orderCode.ToString());
+
+                if (workOrder == null)
+                {
+                    return NotFound(new ApiResponse<object>(404, "NotFound", $"WorkOrder with OrderCode {orderCode} not found."));
+                }
+
+                // Authorization check
+                var userIdClaim = User.FindFirst("UserId")?.Value;
+                var userRole = User.FindFirstValue(ClaimTypes.Role);
+
+                // Customer chỉ xem payment status của mình
+                if (userRole == UserRole.Customer.ToString() && int.TryParse(userIdClaim, out int userId))
+                {
+                    if (workOrder.CustomerId != userId)
+                    {
+                        return StatusCode(403, new ApiResponse<object>(403, "Forbidden", "You can only check payment status for your own orders."));
+                    }
+                }
+
+                // Check if payment already exists in database (already processed by webhook)
+                var existingPayment = await _context.Payments
+                    .FirstOrDefaultAsync(p => p.OrderCode == orderCode.ToString());
+
+                if (existingPayment != null)
+                {
+                    _logger.LogInformation("Payment already processed for OrderCode {OrderCode}", orderCode);
+                    return Ok(new ApiResponse<object>(200, "Success", "Payment has been processed.", data: new
+                    {
+                        status = "PAID",
+                        orderCode = orderCode,
+                        amount = existingPayment.Amount,
+                        paymentDate = existingPayment.PaymentDate,
+                        paymentType = existingPayment.PaymentType,
+                        transactionId = existingPayment.TransactionId,
+                        workOrderId = workOrder.WorkOrderId,
+                        appointmentStatus = workOrder.Appointment?.Status,
+                        invoiceStatus = workOrder.Invoice?.Status
+                    }));
+                }
+
+                // If not in database, query PayOS for status
+                try
+                {
+                    var paymentLinkInfo = await _payOSService.GetPaymentLinkInformation(orderCode);
+
+                    _logger.LogInformation("PayOS payment link status for OrderCode {OrderCode}: {Status}", orderCode, paymentLinkInfo.status);
+
+                    return Ok(new ApiResponse<object>(200, "Success", "Payment link status retrieved successfully.", data: new
+                    {
+                        status = paymentLinkInfo.status,
+                        orderCode = orderCode,
+                        amount = paymentLinkInfo.amount,
+                        amountPaid = paymentLinkInfo.amountPaid,
+                        amountRemaining = paymentLinkInfo.amountRemaining,
+                        createdAt = paymentLinkInfo.createdAt,
+                        workOrderId = workOrder.WorkOrderId,
+                        appointmentStatus = workOrder.Appointment?.Status,
+                        invoiceStatus = workOrder.Invoice?.Status,
+                        transactions = paymentLinkInfo.transactions
+                    }));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error querying PayOS for OrderCode {OrderCode}", orderCode);
+                    return StatusCode(500, new ApiResponse<object>(500, "Error", "Failed to retrieve payment link status from PayOS. " + ex.Message));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking payment link status for OrderCode {OrderCode}", orderCode);
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
     }
 }
 
