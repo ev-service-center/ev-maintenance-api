@@ -32,7 +32,10 @@ namespace EVServiceCenterMaintenanceAPI.DTO
                 public int? ManufactureYear { get; set; }
                 [Range(0, (double)decimal.MaxValue, ErrorMessage = "CurrentMileage must be non-negative.")] public decimal CurrentMileage { get; set; }
                 [StringLength(50)] public string? Color { get; set; }
-                [Required, StringLength(20)] public string Plate { get; set; } = null!;
+                [Required, StringLength(20)]
+                [RegularExpression(@"^(?:\d{2}\p{Lu}{0,2})[-\s]\d{4,5}$", 
+                    ErrorMessage = "Invalid plate format. 01X-12345 / 34CD-1234")]
+                public string Plate { get; set; } = null!;
         }
 
         public class VehicleUpdateRequestDto
