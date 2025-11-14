@@ -366,5 +366,86 @@ namespace EVServiceCenterMaintenanceAPI.Services
                 throw;
             }
         }
+
+        public async Task GenerateSlotsForWeekForCenterAsync(DateTime startDate, int centerId)
+        {
+            try
+            {
+                // Tạo slots cho 7 ngày bắt đầu từ startDate
+                var candidateDates = Enumerable.Range(0, 7)
+                    .Select(i => startDate.AddDays(i))
+                    .ToArray();
+
+                // Chỉ tạo slot cho các ngày từ Monday đến Saturday (bỏ qua Sunday)
+                var datesToGenerate = candidateDates
+                    .Where(ShouldGenerateSlotForDate)
+                    .ToArray();
+
+                var skippedDates = candidateDates.Except(datesToGenerate).ToArray();
+
+                if (skippedDates.Length != 0)
+                {
+                    _logger.LogInformation("Bỏ qua các ngày Chủ nhật: {dates}",
+                        string.Join(", ", skippedDates.Select(d => $"{d:dd/MM} ({d.DayOfWeek})")));
+                }
+
+                if (datesToGenerate.Length == 0)
+                {
+                    _logger.LogInformation("Không có ngày nào cần tạo slot cho trung tâm {centerId} bắt đầu từ {startDate} (đã bỏ qua tất cả các ngày Chủ nhật)",
+                        centerId, startDate.ToString("dd/MM/yyyy"));
+                    return;
+                }
+
+                _logger.LogInformation("Sẽ tạo slot cho trung tâm {centerId} bắt đầu từ {startDate} trong 7 ngày: {dates}",
+                    centerId, startDate.ToString("dd/MM/yyyy"), string.Join(", ", datesToGenerate.Select(d => $"{d:dd/MM} ({d.DayOfWeek})")));
+
+                var durationMinutes = (int)SlotTimeConfig.DefaultDuration;
+                var allSlotsToCreate = new List<AppointmentSlot>();
+
+                // Lấy tất cả các slot đã tồn tại cho center này
+                var existingSlots = await _context.AppointmentSlots
+                    .Where(s => s.CenterId == centerId && datesToGenerate.Contains(s.StartTime.Date))
+                    .Select(s => s.StartTime.Date)
+                    .ToListAsync();
+
+                _logger.LogInformation("Tìm thấy {count} ngày đã có slot cho trung tâm {centerId}",
+                    existingSlots.Count, centerId);
+
+                foreach (var date in datesToGenerate)
+                {
+                    // Kiểm tra trong memory thay vì query database
+                    if (existingSlots.Contains(date.Date))
+                    {
+                        _logger.LogDebug("Bỏ qua ngày {date} - trung tâm {centerId} đã có slot",
+                            date.ToString("dd/MM/yyyy"), centerId);
+                        continue;
+                    }
+
+                    var slotsForDate = GenerateSlotsForDate(centerId, date, durationMinutes);
+                    allSlotsToCreate.AddRange(slotsForDate);
+
+                    _logger.LogInformation("Sẽ tạo {count} slot cho trung tâm {centerId} ngày {date} ({dayOfWeek})",
+                        slotsForDate.Count, centerId, date.ToString("dd/MM/yyyy"), date.DayOfWeek);
+                }
+
+                if (allSlotsToCreate.Count != 0)
+                {
+                    _context.AppointmentSlots.AddRange(allSlotsToCreate);
+                    var savedCount = await _context.SaveChangesAsync();
+                    _logger.LogInformation("✓ Đã lưu thành công {count} slot cho trung tâm {centerId} bắt đầu từ {startDate}",
+                        savedCount, centerId, startDate.ToString("dd/MM/yyyy"));
+                }
+                else
+                {
+                    _logger.LogInformation("Không có slot mới nào cần tạo cho trung tâm {centerId} bắt đầu từ {startDate} - tất cả đã tồn tại",
+                        centerId, startDate.ToString("dd/MM/yyyy"));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi tạo slot cho trung tâm {centerId} bắt đầu từ {startDate}", centerId, startDate.ToString("dd/MM/yyyy"));
+                throw;
+            }
+        }
     }
 }

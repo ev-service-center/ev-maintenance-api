@@ -439,5 +439,70 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 ));
             }
         }
+
+        [HttpPost("generate/week")]
+        [Authorize(Roles = "Staff,Admin")]
+        public async Task<IActionResult> GenerateSlotsForWeek([FromQuery] int centerId, [FromQuery] string date)
+        {
+            try
+            {
+                // Validate CenterId exists
+                var centerError = await ValidateCenterExistsAsync(centerId);
+                if (centerError != null) return centerError;
+
+                // Parse date
+                if (!DateTime.TryParse(date, out var startDate))
+                {
+                    return BadRequest(new ApiResponse<string>(
+                        400,
+                        "Bad Request",
+                        "Định dạng ngày không hợp lệ. Vui lòng dùng format: yyyy-MM-dd (ví dụ: 2025-01-15)"
+                    ));
+                }
+
+                var startDateOnly = startDate.Date;
+                var todayVietnam = TimeZoneHelper.TodayInVietnam;
+
+                // Validate start date is not in the past
+                if (startDateOnly < todayVietnam)
+                {
+                    return BadRequest(new ApiResponse<string>(
+                        400,
+                        "Bad Request",
+                        $"Không thể tạo slot cho ngày trong quá khứ. Ngày bắt đầu phải từ hôm nay trở đi ({todayVietnam:dd/MM/yyyy})"
+                    ));
+                }
+
+                // Get current user and validate authorization
+                var (success, currentUser, errorResponse) = await GetCurrentUserAsync();
+                if (!success) return errorResponse!;
+
+                // Staff can only create slots for their own center
+                var (authSuccess, _, authError) = await ValidateStaffOrTechnicianAccessAsync(currentUser!, centerId, "create slots for");
+                if (!authSuccess) return authError!;
+
+                _logger.LogInformation("User {userId} đang tạo slot cho trung tâm {centerId} bắt đầu từ ngày {date}...",
+                    currentUser!.UserId, centerId, startDateOnly.ToString("yyyy-MM-dd"));
+
+                await _slotGenerator.GenerateSlotsForWeekForCenterAsync(startDateOnly, centerId);
+
+                return Ok(new ApiResponse<string>(
+                    200,
+                    "Success",
+                    $"Đã tạo slot thành công cho trung tâm {centerId} bắt đầu từ ngày {startDateOnly:yyyy-MM-dd} (7 ngày, bỏ qua Chủ nhật)",
+                    null,
+                    "Kiểm tra logs để xem chi tiết số lượng slot đã tạo"
+                ));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi tạo slot cho trung tâm {centerId} từ ngày {date}", centerId, date);
+                return StatusCode(500, new ApiResponse<string>(
+                    500,
+                    "Error",
+                    $"Lỗi khi tạo slot: {ex.Message}"
+                ));
+            }
+        }
     }
 }
