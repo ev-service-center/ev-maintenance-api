@@ -89,6 +89,31 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 .ToListAsync();
         }
 
+        public async Task<Reminder> UpdateReminderAsync(Reminder reminder)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var existingReminder = await _context.Reminders.FirstOrDefaultAsync(r => r.ReminderId == reminder.ReminderId);
+                if (existingReminder == null)
+                    throw new Exception($"Reminder with ID {reminder.ReminderId} not found.");
+
+                existingReminder.ReminderDate = reminder.ReminderDate;
+                existingReminder.Message = reminder.Message;
+                existingReminder.Sent = reminder.Sent;
+                existingReminder.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return existingReminder;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception($"Failed to update reminder with ID {reminder.ReminderId}.", ex);
+            }
+        }
+
         public async Task GenerateRemindersForVehicleAsync(int vehicleId)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();

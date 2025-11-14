@@ -74,10 +74,10 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     UserId = createdReminder.UserId,
                     VehicleId = createdReminder.VehicleId,
                     ServiceId = createdReminder.ServiceId,
-                    ReminderType = Enum.Parse<ReminderType>(createdReminder.ReminderType),
+                    ReminderType = Enum.Parse<ReminderType>(createdReminder.ReminderType!),
                     ReminderDate = createdReminder.ReminderDate,
                     Message = createdReminder.Message,
-                    Sent = createdReminder.Sent.Value,
+                    Sent = createdReminder.Sent!.Value,
                     CreatedAt = createdReminder.CreatedAt,
                     UpdatedAt = createdReminder.UpdatedAt
                 };
@@ -143,6 +143,50 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 }).ToList();
 
                 return Ok(new ApiResponse<List<ReminderResponseDto>>(200, "Success", "Reminders retrieved successfully.", data: dtos));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Staff,Admin")]
+        public async Task<IActionResult> UpdateReminder(int id, [FromBody] ReminderUpdateRequestDto dto)
+        {
+            try
+            {
+                if (id != dto.ReminderId)
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Reminder ID mismatch."));
+
+                var reminder = new Reminder
+                {
+                    ReminderId = dto.ReminderId,
+                    UserId = dto.UserId,
+                    VehicleId = dto.VehicleId,
+                    ServiceId = dto.ServiceId,
+                    ReminderType = dto.ReminderType.ToString(),
+                    ReminderDate = dto.ReminderDate,
+                    Message = dto.Message,
+                    Sent = dto.Sent
+                };
+
+                var updatedReminder = await _reminderDao.UpdateReminderAsync(reminder);
+                var updatedDto = new ReminderResponseDto
+                {
+                    ReminderId = updatedReminder.ReminderId,
+                    UserId = updatedReminder.UserId,
+                    VehicleId = updatedReminder.VehicleId,
+                    ServiceId = updatedReminder.ServiceId,
+                    ReminderType = Enum.Parse<ReminderType>(updatedReminder.ReminderType!),
+                    ReminderDate = updatedReminder.ReminderDate,
+                    Message = updatedReminder.Message,
+                    Sent = updatedReminder.Sent!.Value,
+                    CreatedAt = updatedReminder.CreatedAt,
+                    UpdatedAt = updatedReminder.UpdatedAt
+                };
+
+                return Ok(new ApiResponse<ReminderResponseDto>(200, "Success", "Reminder updated successfully.", data: updatedDto));
             }
             catch (Exception ex)
             {

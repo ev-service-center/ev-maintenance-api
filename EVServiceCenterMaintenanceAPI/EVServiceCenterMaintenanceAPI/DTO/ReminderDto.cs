@@ -26,4 +26,16 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         [Required] public DateTime ReminderDate { get; set; }
         public string? Message { get; set; }
     }
+
+    public class ReminderUpdateRequestDto
+    {
+        [Required] public int ReminderId { get; set; }
+        [Required] public int UserId { get; set; }
+        public int? VehicleId { get; set; }
+        public int? ServiceId { get; set; }
+        [Required] public ReminderType ReminderType { get; set; }
+        [Required] public DateTime ReminderDate { get; set; }
+        public string? Message { get; set; }
+        public bool Sent { get; set; }
+    }
 }
