@@ -18,6 +18,25 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             return await _context.Reminders.FirstOrDefaultAsync(r => r.ReminderId == reminderId);
         }
 
+        public async Task<Reminder> CreateReminderAsync(Reminder reminder)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                reminder.CreatedAt = DateTime.UtcNow;
+                reminder.UpdatedAt = DateTime.UtcNow;
+                _context.Reminders.Add(reminder);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return reminder;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception("Failed to create reminder.", ex);
+            }
+        }
+
         public async Task GenerateRemindersForVehicleAsync(int vehicleId)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();

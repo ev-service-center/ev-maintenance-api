@@ -1,4 +1,5 @@
 ﻿using EVServiceCenterMaintenanceAPI.Enums;
+using System.ComponentModel.DataAnnotations;
 
 namespace EVServiceCenterMaintenanceAPI.DTO
 {
@@ -14,5 +15,15 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         public bool Sent { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+    }
+
+    public class ReminderCreateRequestDto
+    {
+        [Required] public int UserId { get; set; }
+        public int? VehicleId { get; set; }
+        public int? ServiceId { get; set; }
+        [Required] public ReminderType ReminderType { get; set; }
+        [Required] public DateTime ReminderDate { get; set; }
+        public string? Message { get; set; }
     }
 }
