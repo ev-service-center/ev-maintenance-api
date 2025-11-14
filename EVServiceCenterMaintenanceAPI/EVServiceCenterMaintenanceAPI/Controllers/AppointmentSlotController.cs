@@ -138,7 +138,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     CenterId = centerId,
                     StartTime = startTime,
                     EndTime = endTime,
-                    IsAvailable = true
+                    IsAvailable = dto.IsAvailable ?? true
                 };
 
                 var createdSlot = await _appointmentSlotDao.CreateAppointmentSlotAsync(slot);
@@ -408,6 +408,16 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     ));
                 }
 
+                // Validate date is not Sunday
+                if (targetDate.DayOfWeek == DayOfWeek.Sunday)
+                {
+                    return BadRequest(new ApiResponse<string>(
+                        400,
+                        "Bad Request",
+                        $"Không thể tạo slot cho ngày Chủ nhật ({targetDate:dd/MM/yyyy}). Chỉ có thể tạo slot từ Thứ 2 đến Thứ 7."
+                    ));
+                }
+
                 // Get current user and validate authorization
                 var (success, currentUser, errorResponse) = await GetCurrentUserAsync();
                 if (!success) return errorResponse!;
@@ -484,12 +494,23 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 _logger.LogInformation("User {userId} đang tạo slot cho trung tâm {centerId} bắt đầu từ ngày {date}...",
                     currentUser!.UserId, centerId, startDateOnly.ToString("yyyy-MM-dd"));
 
-                await _slotGenerator.GenerateSlotsForWeekForCenterAsync(startDateOnly, centerId);
+                var slotsCreated = await _slotGenerator.GenerateSlotsForWeekForCenterAsync(startDateOnly, centerId);
+
+                if (slotsCreated == 0)
+                {
+                    return Ok(new ApiResponse<string>(
+                        200,
+                        "Success",
+                        $"Không có slot mới nào được tạo cho trung tâm {centerId} bắt đầu từ ngày {startDateOnly:yyyy-MM-dd}. Tất cả các ngày (trừ Chủ nhật) đã có slot.",
+                        null,
+                        "Kiểm tra logs để xem chi tiết"
+                    ));
+                }
 
                 return Ok(new ApiResponse<string>(
                     200,
                     "Success",
-                    $"Đã tạo slot thành công cho trung tâm {centerId} bắt đầu từ ngày {startDateOnly:yyyy-MM-dd} (7 ngày, bỏ qua Chủ nhật)",
+                    $"Đã tạo thành công {slotsCreated} slot cho trung tâm {centerId} bắt đầu từ ngày {startDateOnly:yyyy-MM-dd} (7 ngày, bỏ qua Chủ nhật)",
                     null,
                     "Kiểm tra logs để xem chi tiết số lượng slot đã tạo"
                 ));
