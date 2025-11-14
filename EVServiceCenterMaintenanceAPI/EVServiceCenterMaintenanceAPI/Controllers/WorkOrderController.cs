@@ -206,22 +206,20 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 // Validate Customer and Vehicle (if either changed)
                 if (dto.CustomerId.HasValue || dto.VehicleId.HasValue)
                 {
-                    // Validate Customer if changed
-                    if (dto.CustomerId.HasValue)
-                    {
-                        var customer = await _context.Users.FindAsync(dto.CustomerId.Value);
-                        if (customer == null)
-                            return BadRequest(new ApiResponse<object>(400, "BadRequest", $"Customer with ID {dto.CustomerId.Value} not found."));
+                    // Validate Customer (final)
+                    var customer = await _context.Users.FindAsync(finalCustomerId);
+                    if (customer == null)
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", $"Customer with ID {finalCustomerId} not found."));
 
-                        if (customer.Status != UserStatus.Active.ToString())
-                            return BadRequest(new ApiResponse<object>(400, "BadRequest", "Customer account is not active."));
-                    }
+                    if (customer.Status != UserStatus.Active.ToString())
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", "Customer account is not active."));
 
-                    // Validate Vehicle and cross-field: Vehicle must belong to Customer
+                    // Validate Vehicle (final)
                     var vehicle = await _context.Vehicles.FindAsync(finalVehicleId);
                     if (vehicle == null)
                         return BadRequest(new ApiResponse<object>(400, "BadRequest", $"Vehicle with ID {finalVehicleId} not found."));
 
+                    // Cross-field: Vehicle must belong to Customer
                     if (vehicle.CustomerId != finalCustomerId)
                         return BadRequest(new ApiResponse<object>(400, "BadRequest",
                             $"Vehicle with ID {finalVehicleId} does not belong to customer with ID {finalCustomerId}."));
@@ -233,22 +231,20 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     var finalCenterId = dto.CenterId ?? existingWorkOrder.CenterId;
                     var finalCreatedByStaffId = dto.CreatedByStaffId ?? existingWorkOrder.CreatedByStaffId;
 
-                    // Validate Center if changed
-                    if (dto.CenterId.HasValue)
-                    {
-                        var center = await _context.ServiceCenters.FindAsync(dto.CenterId.Value);
-                        if (center == null)
-                            return BadRequest(new ApiResponse<object>(400, "BadRequest", $"Service center with ID {dto.CenterId.Value} not found."));
+                    // Validate Center (final)
+                    var center = await _context.ServiceCenters.FindAsync(finalCenterId);
+                    if (center == null)
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", $"Service center with ID {finalCenterId} not found."));
 
-                        if (center.Status != ServiceCenterStatus.Open.ToString())
-                            return BadRequest(new ApiResponse<object>(400, "BadRequest", $"Service center '{center.CenterName}' is not open."));
-                    }
+                    if (center.Status != ServiceCenterStatus.Open.ToString())
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", $"Service center '{center.CenterName}' is not open."));
 
-                    // Validate Staff and cross-field: Staff must belong to Center
+                    // Validate Staff (final)
                     var staffToCheck = await _employeeDao.GetEmployeeByIdAsync(finalCreatedByStaffId);
                     if (staffToCheck == null)
                         return BadRequest(new ApiResponse<object>(400, "BadRequest", $"Staff with ID {finalCreatedByStaffId} not found."));
 
+                    // Cross-field: Staff must belong to Center
                     if (staffToCheck.CenterId != finalCenterId)
                         return BadRequest(new ApiResponse<object>(400, "BadRequest",
                             $"Staff with ID {finalCreatedByStaffId} does not belong to service center with ID {finalCenterId}."));
