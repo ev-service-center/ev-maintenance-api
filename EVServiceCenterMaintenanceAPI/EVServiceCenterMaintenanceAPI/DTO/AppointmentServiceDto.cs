@@ -14,6 +14,18 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         public DateTime UpdatedAt { get; set; }
     }
 
+    public class AppointmentServiceUpdateRequestDto
+    {
+        public int? ServiceId { get; set; }
+
+        [Range(0, double.MaxValue, ErrorMessage = "Price must be greater than or equal to 0")]
+        public decimal? Price { get; set; }
+
+        public int? AssignedTechnicianId { get; set; }
+
+        public string? Status { get; set; }
+    }
+
     public class AppointmentServiceUpdateStatusRequestDto
     {
         [Required]
