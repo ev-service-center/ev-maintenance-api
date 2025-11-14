@@ -68,7 +68,15 @@ namespace EVServiceCenterMaintenanceAPI.DAO
         {
             // Customer chỉ xem vehicles Active của mình
             return await _context.Vehicles
-                .Where(v => v.CustomerId == customerId && v.Status == VehicleStatus.Active.ToString())
+                .Where(v => v.CustomerId == customerId &&
+                            v.Status == VehicleStatus.Active.ToString() &&
+                            !v.Appointments.Any(a =>
+                                a.Status == AppointmentStatus.Pending.ToString() ||
+                                a.Status == AppointmentStatus.Confirmed.ToString() ||
+                                a.Status == AppointmentStatus.InProgress.ToString()) &&
+                            !v.WorkOrders.Any(w =>
+                                w.Status == WorkOrderStatus.Pending.ToString() ||
+                                w.Status == WorkOrderStatus.InProgress.ToString()))
                 .Include(v => v.MaintenanceHistories)
                 .ToListAsync();
         }
