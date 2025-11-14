@@ -24,6 +24,8 @@ namespace EVServiceCenterMaintenanceAPI.DTO
 
         [Required(ErrorMessage = "EndTime is required.")]
         public DateTime? EndTime { get; set; }
+
+        public bool? IsAvailable { get; set; }
     }
 
     public class AppointmentSlotUpdateRequestDto

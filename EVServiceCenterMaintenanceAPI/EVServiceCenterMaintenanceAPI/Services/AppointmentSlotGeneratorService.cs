@@ -351,7 +351,7 @@ namespace EVServiceCenterMaintenanceAPI.Services
                 {
                     _context.AppointmentSlots.AddRange(allSlotsToCreate);
                     var savedCount = await _context.SaveChangesAsync();
-                    _logger.LogInformation("✓ Đã lưu thành công {count} slot cho trung tâm {centerId} trong 7 ngày tới",
+                    _logger.LogInformation("Đã lưu thành công {count} slot cho trung tâm {centerId} trong 7 ngày tới",
                         savedCount, centerId);
                 }
                 else
@@ -367,7 +367,7 @@ namespace EVServiceCenterMaintenanceAPI.Services
             }
         }
 
-        public async Task GenerateSlotsForWeekForCenterAsync(DateTime startDate, int centerId)
+        public async Task<int> GenerateSlotsForWeekForCenterAsync(DateTime startDate, int centerId)
         {
             try
             {
@@ -393,7 +393,7 @@ namespace EVServiceCenterMaintenanceAPI.Services
                 {
                     _logger.LogInformation("Không có ngày nào cần tạo slot cho trung tâm {centerId} bắt đầu từ {startDate} (đã bỏ qua tất cả các ngày Chủ nhật)",
                         centerId, startDate.ToString("dd/MM/yyyy"));
-                    return;
+                    return 0;
                 }
 
                 _logger.LogInformation("Sẽ tạo slot cho trung tâm {centerId} bắt đầu từ {startDate} trong 7 ngày: {dates}",
@@ -432,13 +432,15 @@ namespace EVServiceCenterMaintenanceAPI.Services
                 {
                     _context.AppointmentSlots.AddRange(allSlotsToCreate);
                     var savedCount = await _context.SaveChangesAsync();
-                    _logger.LogInformation("✓ Đã lưu thành công {count} slot cho trung tâm {centerId} bắt đầu từ {startDate}",
+                    _logger.LogInformation("Đã lưu thành công {count} slot cho trung tâm {centerId} bắt đầu từ {startDate}",
                         savedCount, centerId, startDate.ToString("dd/MM/yyyy"));
+                    return savedCount;
                 }
                 else
                 {
                     _logger.LogInformation("Không có slot mới nào cần tạo cho trung tâm {centerId} bắt đầu từ {startDate} - tất cả đã tồn tại",
                         centerId, startDate.ToString("dd/MM/yyyy"));
+                    return 0;
                 }
             }
             catch (Exception ex)
