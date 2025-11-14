@@ -74,6 +74,22 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         public string? Notes { get; set; }
         public List<int> ServiceIds { get; set; } = new List<int>();
     }
+    public class WorkOrderUpdateRequestDto
+    {
+        public int? CenterId { get; set; }
+        public int? CustomerId { get; set; }
+        public int? VehicleId { get; set; }
+        public int? CreatedByStaffId { get; set; }
+        public int? AppointmentId { get; set; }
+        public DateTime? CheckInAt { get; set; }
+        public DateTime? CheckOutAt { get; set; }
+        [Range(0, int.MaxValue)] public int? OdometerKm { get; set; }
+        public string? Notes { get; set; }
+    }
+    public class WorkOrderUpdateStatusRequestDto
+    {
+        [Required] public WorkOrderStatus Status { get; set; }
+    }
     public class WorkOrderResponseDto
     {
         public int WorkOrderId { get; set; }

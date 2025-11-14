@@ -136,6 +136,248 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             }
         }
 
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Staff,Technician,Admin")]
+        public async Task<IActionResult> UpdateWorkOrder(int id, [FromBody] WorkOrderUpdateRequestDto dto)
+        {
+            try
+            {
+                if (dto == null)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Empty request (DTO null)."));
+                }
+
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState
+                        .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
+                    return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+                }
+
+                var (userIdClaim, userRole) = GetCurrentUserInfo();
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                var existingWorkOrder = await _workOrderDao.GetWorkOrderByIdAsync(id);
+                if (existingWorkOrder == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "WorkOrder not found."));
+
+                // Center access for Staff/Technician
+                if (userRole == UserRole.Staff.ToString() || userRole == UserRole.Technician.ToString())
+                {
+                    var centerAccessError = await ValidateCenterAccessAsync(existingWorkOrder.CenterId, userRole, currentUserId);
+                    if (centerAccessError != null) return centerAccessError;
+                }
+
+                // Cannot update Completed or Cancelled work orders
+                if (existingWorkOrder.Status == WorkOrderStatus.Completed.ToString() || existingWorkOrder.Status == WorkOrderStatus.Cancelled.ToString())
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                        $"Cannot update {existingWorkOrder.Status} work order. Work order is finalized."));
+                }
+
+                // Technician: Can only update work orders with assigned services
+                if (userRole == UserRole.Technician.ToString())
+                {
+                    var hasAssignedService = existingWorkOrder.AppointmentServices?
+                        .Any(aps => aps.AssignedTechnicianId == currentUserId) ?? false;
+
+                    if (!hasAssignedService)
+                    {
+                        return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
+                            "You can only update work orders with services assigned to you."));
+                    }
+                }
+
+                // Determine final values for cross-field validation
+                var finalCustomerId = dto.CustomerId ?? existingWorkOrder.CustomerId;
+                var finalVehicleId = dto.VehicleId ?? existingWorkOrder.VehicleId;
+                var finalCheckInAt = dto.CheckInAt ?? existingWorkOrder.CheckInAt;
+                var finalCheckOutAt = dto.CheckOutAt ?? existingWorkOrder.CheckOutAt;
+
+                // Validate CheckIn <= CheckOut
+                if (finalCheckInAt.HasValue && finalCheckOutAt.HasValue && finalCheckInAt.Value > finalCheckOutAt.Value)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "ValidationError",
+                        "CheckIn time cannot be after CheckOut time."));
+                }
+
+                // Validate Customer and Vehicle (if either changed)
+                if (dto.CustomerId.HasValue || dto.VehicleId.HasValue)
+                {
+                    // Validate Customer if changed
+                    if (dto.CustomerId.HasValue)
+                    {
+                        var customer = await _context.Users.FindAsync(dto.CustomerId.Value);
+                        if (customer == null)
+                            return BadRequest(new ApiResponse<object>(400, "BadRequest", $"Customer with ID {dto.CustomerId.Value} not found."));
+
+                        if (customer.Status != UserStatus.Active.ToString())
+                            return BadRequest(new ApiResponse<object>(400, "BadRequest", "Customer account is not active."));
+                    }
+
+                    // Validate Vehicle and cross-field: Vehicle must belong to Customer
+                    var vehicle = await _context.Vehicles.FindAsync(finalVehicleId);
+                    if (vehicle == null)
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", $"Vehicle with ID {finalVehicleId} not found."));
+
+                    if (vehicle.CustomerId != finalCustomerId)
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                            $"Vehicle with ID {finalVehicleId} does not belong to customer with ID {finalCustomerId}."));
+                }
+
+                // Validate Center and Staff (if either changed)
+                if (dto.CenterId.HasValue || dto.CreatedByStaffId.HasValue)
+                {
+                    var finalCenterId = dto.CenterId ?? existingWorkOrder.CenterId;
+                    var finalCreatedByStaffId = dto.CreatedByStaffId ?? existingWorkOrder.CreatedByStaffId;
+
+                    // Validate Center if changed
+                    if (dto.CenterId.HasValue)
+                    {
+                        var center = await _context.ServiceCenters.FindAsync(dto.CenterId.Value);
+                        if (center == null)
+                            return BadRequest(new ApiResponse<object>(400, "BadRequest", $"Service center with ID {dto.CenterId.Value} not found."));
+
+                        if (center.Status != ServiceCenterStatus.Open.ToString())
+                            return BadRequest(new ApiResponse<object>(400, "BadRequest", $"Service center '{center.CenterName}' is not open."));
+                    }
+
+                    // Validate Staff and cross-field: Staff must belong to Center
+                    var staffToCheck = await _employeeDao.GetEmployeeByIdAsync(finalCreatedByStaffId);
+                    if (staffToCheck == null)
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", $"Staff with ID {finalCreatedByStaffId} not found."));
+
+                    if (staffToCheck.CenterId != finalCenterId)
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                            $"Staff with ID {finalCreatedByStaffId} does not belong to service center with ID {finalCenterId}."));
+                }
+
+                // Validate AppointmentId if provided (allow null for walk-in)
+                if (dto.AppointmentId.HasValue)
+                {
+                    var appointment = await _context.Appointments.FindAsync(dto.AppointmentId.Value);
+                    if (appointment == null)
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", $"Appointment with ID {dto.AppointmentId.Value} not found."));
+                }
+
+                // Apply partial updates
+                if (dto.CenterId.HasValue) existingWorkOrder.CenterId = dto.CenterId.Value;
+                if (dto.CustomerId.HasValue) existingWorkOrder.CustomerId = dto.CustomerId.Value;
+                if (dto.VehicleId.HasValue) existingWorkOrder.VehicleId = dto.VehicleId.Value;
+                if (dto.CreatedByStaffId.HasValue) existingWorkOrder.CreatedByStaffId = dto.CreatedByStaffId.Value;
+                if (dto.AppointmentId.HasValue) existingWorkOrder.AppointmentId = dto.AppointmentId.Value;
+                if (dto.CheckInAt.HasValue) existingWorkOrder.CheckInAt = dto.CheckInAt.Value;
+                if (dto.CheckOutAt.HasValue) existingWorkOrder.CheckOutAt = dto.CheckOutAt.Value;
+                if (dto.OdometerKm.HasValue) existingWorkOrder.OdometerKm = dto.OdometerKm.Value;
+                if (dto.Notes != null) existingWorkOrder.Notes = dto.Notes;
+
+                var updatedWorkOrder = await _workOrderDao.UpdateWorkOrderAsync(existingWorkOrder);
+
+                var responseDto = new WorkOrderResponseDto
+                {
+                    WorkOrderId = updatedWorkOrder.WorkOrderId,
+                    CenterId = updatedWorkOrder.CenterId,
+                    CustomerId = updatedWorkOrder.CustomerId,
+                    VehicleId = updatedWorkOrder.VehicleId,
+                    CreatedByStaffId = updatedWorkOrder.CreatedByStaffId,
+                    AppointmentId = updatedWorkOrder.AppointmentId,
+                    Status = Enum.Parse<WorkOrderStatus>(updatedWorkOrder.Status),
+                    CheckInAt = updatedWorkOrder.CheckInAt,
+                    CheckOutAt = updatedWorkOrder.CheckOutAt,
+                    OdometerKm = updatedWorkOrder.OdometerKm,
+                    Notes = updatedWorkOrder.Notes
+                };
+
+                return Ok(new ApiResponse<WorkOrderResponseDto>(200, "Success", "WorkOrder updated successfully.", data: responseDto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
+        [HttpPut("{id}/status")]
+        [Authorize(Roles = "Staff,Technician,Admin")]
+        public async Task<IActionResult> UpdateWorkOrderStatus(int id, [FromBody] WorkOrderUpdateStatusRequestDto dto)
+        {
+            try
+            {
+                if (dto == null)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Empty request (DTO null)."));
+                }
+
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState
+                        .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && kvp.Key != "id" && kvp.Value?.Errors?.Count > 0)
+                        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? []);
+                    return BadRequest(new ApiResponse<object>(400, "Validation Error", "One or more validation errors occurred.", errors));
+                }
+
+                if (!Enum.IsDefined(typeof(WorkOrderStatus), dto.Status))
+                {
+                    return BadRequest(new ApiResponse<object>(400, "ValidationError", "Invalid Status value."));
+                }
+
+                var (userIdClaim, userRole) = GetCurrentUserInfo();
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                    return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
+
+                var existingWorkOrder = await _workOrderDao.GetWorkOrderByIdAsync(id);
+                if (existingWorkOrder == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "WorkOrder not found."));
+
+                //Center access for Staff/Technician
+                if (userRole == UserRole.Staff.ToString() || userRole == UserRole.Technician.ToString())
+                {
+                    var centerAccessError = await ValidateCenterAccessAsync(existingWorkOrder.CenterId, userRole, currentUserId);
+                    if (centerAccessError != null) return centerAccessError;
+                }
+
+                // Technician: Can only update status for work orders with assigned services
+                if (userRole == UserRole.Technician.ToString())
+                {
+                    var hasAssignedService = existingWorkOrder.AppointmentServices?
+                        .Any(aps => aps.AssignedTechnicianId == currentUserId) ?? false;
+
+                    if (!hasAssignedService)
+                    {
+                        return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
+                            "You can only update status for work orders with services assigned to you."));
+                    }
+                }
+
+                // Update status
+                existingWorkOrder.Status = dto.Status.ToString();
+
+                var updatedWorkOrder = await _workOrderDao.UpdateWorkOrderAsync(existingWorkOrder);
+
+                var responseDto = new WorkOrderResponseDto
+                {
+                    WorkOrderId = updatedWorkOrder.WorkOrderId,
+                    CenterId = updatedWorkOrder.CenterId,
+                    CustomerId = updatedWorkOrder.CustomerId,
+                    VehicleId = updatedWorkOrder.VehicleId,
+                    CreatedByStaffId = updatedWorkOrder.CreatedByStaffId,
+                    AppointmentId = updatedWorkOrder.AppointmentId,
+                    Status = Enum.Parse<WorkOrderStatus>(updatedWorkOrder.Status),
+                    CheckInAt = updatedWorkOrder.CheckInAt,
+                    CheckOutAt = updatedWorkOrder.CheckOutAt,
+                    OdometerKm = updatedWorkOrder.OdometerKm,
+                    Notes = updatedWorkOrder.Notes
+                };
+
+                return Ok(new ApiResponse<WorkOrderResponseDto>(200, "Success", "WorkOrder status updated successfully.", data: responseDto));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<object>(500, "Error", ex.Message));
+            }
+        }
+
         [HttpGet("{id}")]
         [Authorize(Roles = "Customer,Staff,Technician,Admin")]
         public async Task<IActionResult> GetWorkOrder(int id)

@@ -184,17 +184,17 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 .ToListAsync();
         }
 
-        public async Task<WorkOrder> UpdateWorkOrderAsync(WorkOrder workOrder, List<int> serviceIds)
+        public async Task<WorkOrder> UpdateWorkOrderAsync(WorkOrder workOrder)
         {
+            using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
                 var existingWorkOrder = await _context.WorkOrders
-                    .Include(wo => wo.AppointmentServices)
                     .FirstOrDefaultAsync(wo => wo.WorkOrderId == workOrder.WorkOrderId);
 
                 if (existingWorkOrder == null)
                 {
-                    throw new Exception("WorkOrder not found.");
+                    throw new Exception($"WorkOrder with ID {workOrder.WorkOrderId} not found.");
                 }
 
                 existingWorkOrder.CenterId = workOrder.CenterId;
@@ -207,55 +207,9 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 existingWorkOrder.CheckOutAt = workOrder.CheckOutAt;
                 existingWorkOrder.OdometerKm = workOrder.OdometerKm;
                 existingWorkOrder.Notes = workOrder.Notes;
-                existingWorkOrder.CheckOutAt = DateTime.UtcNow;
-
-                var existingServiceIds = existingWorkOrder.AppointmentServices.Select(aps => aps.ServiceId).ToList();
-                var servicesToAdd = serviceIds.Where(id => !existingServiceIds.Contains(id)).ToList();
-                var servicesToRemove = existingServiceIds.Where(id => !serviceIds.Contains(id)).ToList();
-
-                // Validate services to add exist
-                if (servicesToAdd.Any())
-                {
-                    var validServices = await _context.Services
-                        .Where(s => servicesToAdd.Contains(s.ServiceId))
-                        .Select(s => s.ServiceId)
-                        .ToListAsync();
-
-                    var invalidServiceIds = servicesToAdd.Except(validServices).ToList();
-                    if (invalidServiceIds.Any())
-                    {
-                        throw new InvalidOperationException(
-                            $"Invalid service IDs: {string.Join(", ", invalidServiceIds)}");
-                    }
-                }
-
-                // Remove old services
-                var servicesToDelete = existingWorkOrder.AppointmentServices
-                    .Where(aps => servicesToRemove.Contains(aps.ServiceId)).ToList();
-                _context.AppointmentServices.RemoveRange(servicesToDelete);
-
-                // Add new services with prices
-                if (servicesToAdd.Any())
-                {
-                    var services = await _context.Services
-                        .Where(s => servicesToAdd.Contains(s.ServiceId))
-                        .ToListAsync();
-
-                    foreach (var service in services)
-                    {
-                        var appointmentService = new AppointmentService
-                        {
-                            WorkOrderId = existingWorkOrder.WorkOrderId,
-                            ServiceId = service.ServiceId,
-                            Price = service.BasePrice,
-                            CreatedAt = DateTime.UtcNow,
-                            UpdatedAt = DateTime.UtcNow
-                        };
-                        _context.AppointmentServices.Add(appointmentService);
-                    }
-                }
 
                 await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
 
                 var result = await _context.WorkOrders
                     .Include(wo => wo.Center)
@@ -264,13 +218,15 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                     .Include(wo => wo.Appointment)
                     .Include(wo => wo.AppointmentServices)
                         .ThenInclude(aps => aps.Service)
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(wo => wo.WorkOrderId == workOrder.WorkOrderId);
 
                 return result ?? throw new InvalidOperationException("Failed to retrieve updated WorkOrder.");
             }
-            catch
+            catch (Exception ex)
             {
-                throw;
+                await transaction.RollbackAsync();
+                throw new Exception($"Failed to update WorkOrder with ID {workOrder.WorkOrderId}.", ex);
             }
         }
 
