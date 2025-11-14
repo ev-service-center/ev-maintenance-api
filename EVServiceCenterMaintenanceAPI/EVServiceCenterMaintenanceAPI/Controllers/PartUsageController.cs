@@ -79,16 +79,27 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 var unitCostPrice = part.CostPrice;
                 var unitPrice = part.Price;
 
-                if (dto.UnitCostPrice.HasValue && dto.UnitCostPrice.Value != unitCostPrice)
+                if (userRole == UserRole.Admin.ToString())
                 {
-                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
-                        $"UnitCostPrice mismatch. Expected {unitCostPrice}, received {dto.UnitCostPrice.Value}."));
-                }
+                    // Admin can optionally provide prices for verification
+                    if (dto.UnitCostPrice.HasValue && dto.UnitCostPrice.Value != unitCostPrice)
+                    {
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                            $"UnitCostPrice mismatch. Expected {unitCostPrice}, received {dto.UnitCostPrice.Value}."));
+                    }
 
-                if (dto.UnitPrice.HasValue && dto.UnitPrice.Value != unitPrice)
+                    if (dto.UnitPrice.HasValue && dto.UnitPrice.Value != unitPrice)
+                    {
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest",
+                            $"UnitPrice mismatch. Expected {unitPrice}, received {dto.UnitPrice.Value}."));
+                    }
+                }
+                else
                 {
-                    return BadRequest(new ApiResponse<object>(400, "BadRequest",
-                        $"UnitPrice mismatch. Expected {unitPrice}, received {dto.UnitPrice.Value}."));
+                    if (dto.UnitCostPrice.HasValue)
+                    {
+                        _logger.LogWarning("Staff/Technician provided UnitCostPrice in request, but it will be ignored. Using CostPrice from part.");
+                    }
                 }
 
                 // Create PartUsage entity
@@ -97,7 +108,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     HistoryId = dto.HistoryId,
                     PartId = dto.PartId,
                     QuantityUsed = dto.QuantityUsed,
-                    UnitCostPrice = unitCostPrice,
+                    UnitCostPrice = unitCostPrice,  // Always from part (Staff can't see this)
                     UnitPrice = unitPrice
                 };
 
