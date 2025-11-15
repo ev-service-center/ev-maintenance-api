@@ -119,7 +119,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
         public async Task<Part> UpdatePartAsync(Part part)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
+            // using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
                 var existingPart = await _context.Parts.FirstOrDefaultAsync(p => p.PartId == part.PartId);
@@ -135,12 +135,12 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 existingPart.UpdatedAt = DateTime.UtcNow;
 
                 await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
+                // await transaction.CommitAsync();
                 return existingPart;
             }
             catch (Exception ex)
             {
-                await transaction.RollbackAsync();
+                // await transaction.RollbackAsync();
                 throw new Exception($"Failed to update part with ID {part.PartId}.", ex);
             }
         }
