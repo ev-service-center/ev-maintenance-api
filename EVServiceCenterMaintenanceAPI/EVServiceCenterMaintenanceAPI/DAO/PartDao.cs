@@ -159,7 +159,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
         public async Task<(int Transferred, int Merged)> TransferPartsToAnotherCenterAsync(int sourceCenterId, int targetCenterId)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
+            //using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
                 // Lấy TẤT CẢ parts của center nguồn
@@ -169,7 +169,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
                 if (sourceParts.Count == 0)
                 {
-                    await transaction.CommitAsync();
+                    //await transaction.CommitAsync();
                     return (0, 0); // Không có parts cần transfer
                 }
 
@@ -222,13 +222,13 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 }
 
                 await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
+                //await transaction.CommitAsync();
 
                 return (transferredCount, mergedCount);
             }
             catch (Exception ex)
             {
-                await transaction.RollbackAsync();
+                //await transaction.RollbackAsync();
                 throw new Exception($"Failed to transfer parts from center {sourceCenterId} to center {targetCenterId}.", ex);
             }
         }
