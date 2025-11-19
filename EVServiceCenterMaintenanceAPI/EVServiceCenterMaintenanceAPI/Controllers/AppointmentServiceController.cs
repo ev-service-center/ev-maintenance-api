@@ -43,7 +43,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         /// <summary>
         /// Validate Staff/Technician can only access appointment services at their center
         /// </summary>
-        private async Task<IActionResult?> ValidateCenterAccessAsync(int workOrderCenterId, string? userRole, int currentUserId)
+        private async Task<IActionResult?> ValidateCenterAccessAsync(int centerId, string? userRole, int currentUserId)
         {
             if (userRole != UserRole.Staff.ToString() && userRole != UserRole.Technician.ToString())
                 return null; // Not Staff/Technician, no restriction
@@ -53,7 +53,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return BadRequest(new ApiResponse<object>(400, "BadRequest",
                     $"{userRole} user does not have an associated employee record."));
 
-            if (workOrderCenterId != currentEmployee.CenterId)
+            if (centerId != currentEmployee.CenterId)
                 return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
                     $"{userRole} can only access appointment services from their own service center (Center ID: {currentEmployee.CenterId})."));
 
