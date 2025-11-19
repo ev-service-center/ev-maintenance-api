@@ -112,6 +112,7 @@ builder.Services.AddScoped<AppointmentDao>();
 builder.Services.AddScoped<WorkOrderDao>();
 builder.Services.AddScoped<InvoiceDao>();
 builder.Services.AddScoped<PayOSService>();
+builder.Services.AddScoped<AppointmentServiceDao>();
 builder.Services.Configure<PayOSSettings>(builder.Configuration.GetSection("PayOS"));
 builder.Services.Configure<ForwardedHeadersOptions>(option =>
 {
