@@ -8,6 +8,7 @@ namespace EVServiceCenterMaintenanceAPI.DTO
         {
                 public int VehicleId { get; set; }
                 public int CustomerId { get; set; }
+                public CustomerInfoDto? Customer { get; set; }
                 public string Model { get; set; } = null!;
                 public string VIN { get; set; } = null!;
                 public int? ManufactureYear { get; set; }
@@ -19,6 +20,14 @@ namespace EVServiceCenterMaintenanceAPI.DTO
                 public string? ImageUrl { get; set; }
                 public DateTime CreatedAt { get; set; }
                 public DateTime UpdatedAt { get; set; }
+        }
+
+        public class CustomerInfoDto
+        {
+                public int UserId { get; set; }
+                public string FullName { get; set; } = null!;
+                public string? Email { get; set; }
+                public string? Phone { get; set; }
         }
 
         public class VehicleCreateRequestDto

@@ -48,7 +48,12 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 _context.Vehicles.Add(vehicle);
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
-                return vehicle;
+
+                var createdVehicle = await _context.Vehicles
+                    .Include(v => v.Customer)
+                    .FirstOrDefaultAsync(v => v.VehicleId == vehicle.VehicleId);
+
+                return createdVehicle ?? vehicle;
             }
             catch (Exception ex)
             {
@@ -60,6 +65,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
         public async Task<Vehicle?> GetVehicleByIdAsync(int vehicleId)
         {
             return await _context.Vehicles
+                .Include(v => v.Customer)
                 .Include(v => v.MaintenanceHistories)
                 .FirstOrDefaultAsync(v => v.VehicleId == vehicleId);
         }
@@ -77,6 +83,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                             !v.WorkOrders.Any(w =>
                                 w.Status == WorkOrderStatus.Pending.ToString() ||
                                 w.Status == WorkOrderStatus.InProgress.ToString()))
+                .Include(v => v.Customer)
                 .Include(v => v.MaintenanceHistories)
                 .ToListAsync();
         }
@@ -89,7 +96,10 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 throw new ArgumentException(validation.ErrorMessage);
             }
 
-            var query = _context.Vehicles.Include(v => v.MaintenanceHistories).AsQueryable();
+            var query = _context.Vehicles
+                .Include(v => v.Customer)
+                .Include(v => v.MaintenanceHistories)
+                .AsQueryable();
 
             if (!string.IsNullOrEmpty(queryParams.Search))
                 query = query.Where(v => v.Model.Contains(queryParams.Search) || v.Vin.Contains(queryParams.Search) || v.Plate.Contains(queryParams.Search));
@@ -155,7 +165,12 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             {
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
-                return vehicle;
+
+                var updatedVehicle = await _context.Vehicles
+                    .Include(v => v.Customer)
+                    .FirstOrDefaultAsync(v => v.VehicleId == vehicle.VehicleId);
+
+                return updatedVehicle ?? vehicle;
             }
             catch (Exception ex)
             {
