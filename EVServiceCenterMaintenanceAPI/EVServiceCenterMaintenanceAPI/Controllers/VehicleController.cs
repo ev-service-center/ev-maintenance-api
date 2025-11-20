@@ -168,7 +168,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
 
         [HttpGet("customer/{customerId}")]
         [Authorize(Roles = "Customer,Staff,Admin")]
-        public async Task<IActionResult> GetVehiclesByCustomer(int customerId)
+        public async Task<IActionResult> GetVehiclesByCustomer(int customerId, [FromQuery] bool availableOnly = false)
         {
             try
             {
@@ -184,7 +184,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 }
                 // Staff and Admin can view vehicles for any customer
 
-                var vehicles = await _vehicleDao.GetVehiclesByCustomerIdAsync(customerId);
+                var vehicles = await _vehicleDao.GetVehiclesByCustomerIdAsync(customerId, availableOnly);
                 var dtos = vehicles.Select(v => new VehicleResponeDto
                 {
                     VehicleId = v.VehicleId,
