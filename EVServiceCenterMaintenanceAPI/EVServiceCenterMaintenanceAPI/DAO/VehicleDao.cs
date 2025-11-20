@@ -70,22 +70,28 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 .FirstOrDefaultAsync(v => v.VehicleId == vehicleId);
         }
 
-        public async Task<List<Vehicle>> GetVehiclesByCustomerIdAsync(int customerId)
+        public async Task<List<Vehicle>> GetVehiclesByCustomerIdAsync(int customerId, bool availableOnly = false)
         {
-            // Customer chỉ xem vehicles Active của mình
-            return await _context.Vehicles
+            var query = _context.Vehicles
                 .Where(v => v.CustomerId == customerId &&
-                            v.Status == VehicleStatus.Active.ToString() &&
-                            !v.Appointments.Any(a =>
-                                a.Status == AppointmentStatus.Pending.ToString() ||
-                                a.Status == AppointmentStatus.Confirmed.ToString() ||
-                                a.Status == AppointmentStatus.InProgress.ToString()) &&
-                            !v.WorkOrders.Any(w =>
-                                w.Status == WorkOrderStatus.Pending.ToString() ||
-                                w.Status == WorkOrderStatus.InProgress.ToString()))
+                            v.Status == VehicleStatus.Active.ToString())
                 .Include(v => v.Customer)
                 .Include(v => v.MaintenanceHistories)
-                .ToListAsync();
+                .AsQueryable();
+
+            if (availableOnly)
+            {
+                query = query.Where(v =>
+                    !v.Appointments.Any(a =>
+                        a.Status == AppointmentStatus.Pending.ToString() ||
+                        a.Status == AppointmentStatus.Confirmed.ToString() ||
+                        a.Status == AppointmentStatus.InProgress.ToString()) &&
+                    !v.WorkOrders.Any(w =>
+                        w.Status == WorkOrderStatus.Pending.ToString() ||
+                        w.Status == WorkOrderStatus.InProgress.ToString()));
+            }
+
+            return await query.ToListAsync();
         }
 
         public async Task<(List<Vehicle> Vehicles, int Total)> GetAllVehiclesAsync(VehicleQueryParams queryParams)
