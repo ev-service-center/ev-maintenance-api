@@ -36,6 +36,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             return await _context.Employees
                 .Include(e => e.EmployeeNavigation)
                 .Include(e => e.Center)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(e => e.EmployeeId == employeeId);
         }
 

@@ -26,41 +26,115 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 .FirstOrDefaultAsync(aps => aps.AppointmentServiceId == id);
         }
 
-        public async Task<AppointmentService> UpdateAppointmentServiceAsync(AppointmentService appointmentService)
+        public async Task<AppointmentService> AssignTechnicianAsync(AppointmentService appointmentService, int technicianId)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                var existingAppointmentService = await _context.AppointmentServices
-                    .FirstOrDefaultAsync(aps => aps.AppointmentServiceId == appointmentService.AppointmentServiceId);
-
-                if (existingAppointmentService == null)
-                {
-                    throw new Exception($"AppointmentService with ID {appointmentService.AppointmentServiceId} not found.");
-                }
-
-                existingAppointmentService.WorkOrderId = appointmentService.WorkOrderId;
-                existingAppointmentService.ServiceId = appointmentService.ServiceId;
-                existingAppointmentService.Price = appointmentService.Price;
-                existingAppointmentService.AssignedTechnicianId = appointmentService.AssignedTechnicianId;
-                existingAppointmentService.Status = appointmentService.Status;
-                existingAppointmentService.UpdatedAt = DateTime.UtcNow;
-
+                _context.AppointmentServices.Attach(appointmentService);
+                appointmentService.AssignedTechnicianId = technicianId;
+                appointmentService.UpdatedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                var result = await _context.AppointmentServices
-                    .Include(aps => aps.Service)
-                    .Include(aps => aps.WorkOrder)
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(aps => aps.AppointmentServiceId == appointmentService.AppointmentServiceId);
-
-                return result ?? throw new InvalidOperationException("Failed to retrieve updated AppointmentService.");
+                return appointmentService;
             }
             catch (Exception ex)
             {
                 await transaction.RollbackAsync();
                 throw new Exception($"Failed to update AppointmentService with ID {appointmentService.AppointmentServiceId}.", ex);
+            }
+        }
+
+        public async Task<AppointmentService> UpdateStatusAsync(AppointmentService appointmentService, string status)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                _context.AppointmentServices.Attach(appointmentService);
+                appointmentService.Status = status;
+                appointmentService.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return appointmentService;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception($"Failed to update AppointmentService status with ID {appointmentService.AppointmentServiceId}.", ex);
+            }
+        }
+
+        public async Task<AppointmentService> UpdateAppointmentServiceAsync(AppointmentService appointmentService)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                _context.AppointmentServices.Attach(appointmentService);
+                appointmentService.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return appointmentService;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception($"Failed to update AppointmentService with ID {appointmentService.AppointmentServiceId}.", ex);
+            }
+        }
+
+        public async Task<List<AppointmentService>> GetAppointmentServicesByIdsAsync(List<int> ids)
+        {
+            return await _context.AppointmentServices
+                .Include(aps => aps.WorkOrder)
+                    .ThenInclude(wo => wo!.Center)
+                .AsNoTracking()
+                .Where(aps => ids.Contains(aps.AppointmentServiceId))
+                .ToListAsync();
+        }
+
+        public async Task<List<AppointmentService>> BatchAssignTechnicianAsync(Dictionary<int, int> assignments)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var appointmentServiceIds = assignments.Keys.ToList();
+                var appointmentServices = await _context.AppointmentServices
+                    .Where(aps => appointmentServiceIds.Contains(aps.AppointmentServiceId))
+                    .ToListAsync();
+
+                foreach (var appointmentService in appointmentServices)
+                {
+                    if (assignments.TryGetValue(appointmentService.AppointmentServiceId, out int technicianId))
+                    {
+                        appointmentService.AssignedTechnicianId = technicianId;
+                        appointmentService.UpdatedAt = DateTime.UtcNow;
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                var results = await _context.AppointmentServices
+                    .Include(aps => aps.Service)
+                    .Include(aps => aps.WorkOrder)
+                        .ThenInclude(wo => wo!.Center)
+                    .Include(aps => aps.WorkOrder)
+                        .ThenInclude(wo => wo!.Customer)
+                    .Include(aps => aps.WorkOrder)
+                        .ThenInclude(wo => wo!.Vehicle)
+                    .AsNoTracking()
+                    .Where(aps => appointmentServiceIds.Contains(aps.AppointmentServiceId))
+                    .ToListAsync();
+
+                return results;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                throw new Exception("Failed to batch assign technicians.", ex);
             }
         }
     }
