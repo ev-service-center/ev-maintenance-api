@@ -93,6 +93,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         .ThenInclude(a => a!.Slot)
                     .Include(w => w.Customer)
                     .Include(w => w.Vehicle)
+                    .Include(w => w.MaintenanceHistories)
                     .FirstOrDefaultAsync(w => w.OrderCode == orderCode.ToString());
 
                 if (workOrder == null)
@@ -267,6 +268,30 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                             {
                                 workOrder.Appointment.Status = AppointmentStatus.Completed.ToString();
                                 _logger.LogInformation("Appointment {AppointmentId} status updated to Completed", workOrder.Appointment.AppointmentId);
+                            }
+
+                            // Update Vehicle LastMaintenanceDate when work order is completed
+                            if (workOrder.Vehicle != null)
+                            {
+                                // Get the latest MaintenanceDate from MaintenanceHistories, or use payment date as fallback
+                                DateTime lastMaintenanceDate = paymentDateTime.ConvertToUtc();
+
+                                if (workOrder.MaintenanceHistories != null && workOrder.MaintenanceHistories.Any())
+                                {
+                                    var latestMaintenanceDate = workOrder.MaintenanceHistories
+                                        .OrderByDescending(mh => mh.MaintenanceDate)
+                                        .FirstOrDefault()?.MaintenanceDate;
+
+                                    if (latestMaintenanceDate.HasValue)
+                                    {
+                                        lastMaintenanceDate = latestMaintenanceDate.Value;
+                                    }
+                                }
+
+                                workOrder.Vehicle.LastMaintenanceDate = lastMaintenanceDate;
+                                workOrder.Vehicle.UpdatedAt = DateTime.UtcNow;
+                                _logger.LogInformation("Vehicle {VehicleId} LastMaintenanceDate updated to {LastMaintenanceDate} (UTC)",
+                                    workOrder.Vehicle.VehicleId, lastMaintenanceDate);
                             }
                         }
                         else
@@ -522,6 +547,43 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     {
                         invoice.Status = InvoiceStatus.Paid.ToString();
                         invoice.UpdatedAt = DateTime.UtcNow;
+
+                        // Update WorkOrder status to Completed when invoice is fully paid
+                        if (invoice.WorkOrder != null)
+                        {
+                            invoice.WorkOrder.Status = WorkOrderStatus.Completed.ToString();
+                            _logger.LogInformation("WorkOrder {WorkOrderId} status updated to Completed", invoice.WorkOrder.WorkOrderId);
+
+                            // Update Appointment status to Completed if exists
+                            if (invoice.WorkOrder.Appointment != null)
+                            {
+                                invoice.WorkOrder.Appointment.Status = AppointmentStatus.Completed.ToString();
+                                _logger.LogInformation("Appointment {AppointmentId} status updated to Completed", invoice.WorkOrder.Appointment.AppointmentId);
+                            }
+
+                            if (invoice.WorkOrder.Vehicle != null)
+                            {
+                                DateTime lastMaintenanceDate = DateTime.UtcNow;
+
+                                if (invoice.WorkOrder.MaintenanceHistories != null && invoice.WorkOrder.MaintenanceHistories.Any())
+                                {
+                                    var latestMaintenanceDate = invoice.WorkOrder.MaintenanceHistories
+                                        .OrderByDescending(mh => mh.MaintenanceDate)
+                                        .FirstOrDefault()?.MaintenanceDate;
+
+                                    if (latestMaintenanceDate.HasValue)
+                                    {
+                                        lastMaintenanceDate = latestMaintenanceDate.Value;
+                                    }
+                                }
+
+                                invoice.WorkOrder.Vehicle.LastMaintenanceDate = lastMaintenanceDate;
+                                invoice.WorkOrder.Vehicle.UpdatedAt = DateTime.UtcNow;
+                                _logger.LogInformation("Vehicle {VehicleId} LastMaintenanceDate updated to {LastMaintenanceDate} (UTC)",
+                                    invoice.WorkOrder.Vehicle.VehicleId, lastMaintenanceDate);
+                            }
+                        }
+
                         await _context.SaveChangesAsync();
                         _logger.LogInformation("Invoice {InvoiceId} marked as Paid (remainingAmount: {RemainingAmount})",
                             invoice.InvoiceId, remainingAmount);

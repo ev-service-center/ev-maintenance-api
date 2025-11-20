@@ -82,6 +82,13 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 {
                     VehicleId = createdVehicle.VehicleId,
                     CustomerId = createdVehicle.CustomerId,
+                    Customer = createdVehicle.Customer == null ? null : new CustomerInfoDto
+                    {
+                        UserId = createdVehicle.Customer.UserId,
+                        FullName = createdVehicle.Customer.FullName,
+                        Email = createdVehicle.Customer.Email,
+                        Phone = createdVehicle.Customer.Phone
+                    },
                     Model = createdVehicle.Model,
                     VIN = createdVehicle.Vin,
                     ManufactureYear = createdVehicle.ManufactureYear,
@@ -132,6 +139,13 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 {
                     VehicleId = vehicle.VehicleId,
                     CustomerId = vehicle.CustomerId,
+                    Customer = vehicle.Customer == null ? null : new CustomerInfoDto
+                    {
+                        UserId = vehicle.Customer.UserId,
+                        FullName = vehicle.Customer.FullName,
+                        Email = vehicle.Customer.Email,
+                        Phone = vehicle.Customer.Phone
+                    },
                     Model = vehicle.Model,
                     VIN = vehicle.Vin,
                     ManufactureYear = vehicle.ManufactureYear,
@@ -175,6 +189,13 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 {
                     VehicleId = v.VehicleId,
                     CustomerId = v.CustomerId,
+                    Customer = v.Customer == null ? null : new CustomerInfoDto
+                    {
+                        UserId = v.Customer.UserId,
+                        FullName = v.Customer.FullName,
+                        Email = v.Customer.Email,
+                        Phone = v.Customer.Phone
+                    },
                     Model = v.Model,
                     VIN = v.Vin,
                     ManufactureYear = v.ManufactureYear,
@@ -207,6 +228,13 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 {
                     VehicleId = v.VehicleId,
                     CustomerId = v.CustomerId,
+                    Customer = v.Customer == null ? null : new CustomerInfoDto
+                    {
+                        UserId = v.Customer.UserId,
+                        FullName = v.Customer.FullName,
+                        Email = v.Customer.Email,
+                        Phone = v.Customer.Phone
+                    },
                     Model = v.Model,
                     VIN = v.Vin,
                     ManufactureYear = v.ManufactureYear,
@@ -354,6 +382,13 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 {
                     VehicleId = updatedVehicle.VehicleId,
                     CustomerId = updatedVehicle.CustomerId,
+                    Customer = updatedVehicle.Customer == null ? null : new CustomerInfoDto
+                    {
+                        UserId = updatedVehicle.Customer.UserId,
+                        FullName = updatedVehicle.Customer.FullName,
+                        Email = updatedVehicle.Customer.Email,
+                        Phone = updatedVehicle.Customer.Phone
+                    },
                     Model = updatedVehicle.Model,
                     VIN = updatedVehicle.Vin,
                     ManufactureYear = updatedVehicle.ManufactureYear,
