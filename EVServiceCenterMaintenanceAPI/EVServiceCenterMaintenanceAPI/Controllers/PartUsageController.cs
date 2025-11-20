@@ -54,7 +54,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
                         return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
 
-                    var partToCheck = await _context.Parts.FindAsync(dto.PartId);
+                    var partToCheck = await _context.Parts
+                        .Where(p => p.PartId == dto.PartId && p.Status != PartStatus.Inactive.ToString())
+                        .FirstOrDefaultAsync();
                     if (partToCheck == null)
                         return NotFound(new ApiResponse<object>(404, "NotFound", $"Part with ID {dto.PartId} not found."));
 
@@ -435,7 +437,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     return Unauthorized(new ApiResponse<object>(401, "Unauthorized", "Invalid user ID."));
 
                 // Get Part to check CenterId
-                var part = await _context.Parts.FindAsync(partId);
+                var part = await _context.Parts
+                    .Where(p => p.PartId == partId && p.Status != PartStatus.Inactive.ToString())
+                    .FirstOrDefaultAsync();
                 if (part == null)
                     return NotFound(new ApiResponse<object>(404, "NotFound", $"Part with ID {partId} not found."));
 
@@ -744,6 +748,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             if (currentEmployee == null)
                 return BadRequest(new ApiResponse<object>(400, "BadRequest",
                     $"{currentUser.Role} user does not have an associated employee record."));
+
+            if (currentEmployee.Center == null || currentEmployee.Center.Status == ServiceCenterStatus.Deleted.ToString())
+                return BadRequest(new ApiResponse<object>(400, "BadRequest", "Your service center has been deleted. Please contact administrator."));
 
             if (partCenterId != currentEmployee.CenterId)
                 return StatusCode(403, new ApiResponse<object>(403, "Forbidden",

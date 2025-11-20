@@ -187,6 +187,17 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 if (id != dto.ServiceId)
                     return BadRequest(new ApiResponse<object>(400, "BadRequest", "Service ID mismatch."));
 
+                var existingService = await _serviceDao.GetServiceByIdAsync(id);
+                if (existingService == null)
+                    return NotFound(new ApiResponse<object>(404, "NotFound", "Service not found."));
+
+                // Check if service is inactive and not being restored
+                if (existingService.Status == ServiceStatus.Inactive.ToString() &&
+                    dto.Status != ServiceStatus.Active)
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Cannot update inactive service. To restore, please update the status to Active."));
+                }
+
                 var service = new Service
                 {
                     ServiceId = dto.ServiceId,

@@ -47,9 +47,12 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 throw new ArgumentException(ErrorMessage);
             }
 
-            var query = queryParams.StatusPart.HasValue
-                ? _context.Parts.IgnoreQueryFilters().AsQueryable()
-                : _context.Parts.AsQueryable();
+            var query = _context.Parts.AsQueryable();
+
+            if (!queryParams.StatusPart.HasValue)
+            {
+                query = query.Where(p => p.Status != PartStatus.Inactive.ToString());
+            }
 
             if (!string.IsNullOrEmpty(queryParams.Search))
                 query = query.Where(p => p.PartName.Contains(queryParams.Search));
@@ -91,7 +94,9 @@ namespace EVServiceCenterMaintenanceAPI.DAO
         public async Task<List<PartSuggestionDto>> GetPartReorderSuggestionsAsync(int centerId)
         {
             var parts = await _context.Parts
-                .Where(p => p.CenterId == centerId && p.QuantityInStock < p.MinStock)
+                .Where(p => p.CenterId == centerId
+                         && p.QuantityInStock < p.MinStock
+                         && p.Status == PartStatus.Active.ToString())
                 .ToListAsync();
 
             var suggestions = new List<PartSuggestionDto>();
@@ -122,7 +127,9 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             // using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                var existingPart = await _context.Parts.FirstOrDefaultAsync(p => p.PartId == part.PartId);
+                var existingPart = await _context.Parts
+                    .Where(p => p.PartId == part.PartId && p.Status != PartStatus.Inactive.ToString())
+                    .FirstOrDefaultAsync();
                 if (existingPart == null)
                     throw new Exception($"Part with ID {part.PartId} not found.");
 

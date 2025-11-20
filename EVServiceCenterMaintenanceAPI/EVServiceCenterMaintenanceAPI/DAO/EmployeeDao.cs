@@ -36,6 +36,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             return await _context.Employees
                 .Include(e => e.EmployeeNavigation)
                 .Include(e => e.Center)
+                    .IgnoreQueryFilters()
                 .AsNoTracking()
                 .FirstOrDefaultAsync(e => e.EmployeeId == employeeId);
         }
@@ -51,6 +52,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             var query = _context.Employees
                 .Include(e => e.EmployeeNavigation)
                 .Include(e => e.Center)
+                    .IgnoreQueryFilters()
                 .AsQueryable();
 
             if (!string.IsNullOrEmpty(queryParams.Search))
@@ -104,6 +106,7 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             return await _context.Employees
                 .Include(e => e.EmployeeNavigation)
                 .Include(e => e.Center)
+                    .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(e => e.EmployeeId == employee.EmployeeId) ?? employee;
         }
 

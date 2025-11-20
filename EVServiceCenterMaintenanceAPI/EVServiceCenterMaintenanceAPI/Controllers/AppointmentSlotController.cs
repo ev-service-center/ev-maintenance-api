@@ -59,6 +59,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             if (employee == null)
                 return (false, null, BadRequest(new ApiResponse<object>(400, "BadRequest", $"{user.Role} user does not have an associated employee record.")));
 
+            if (employee.Center == null || employee.Center.Status == ServiceCenterStatus.Deleted.ToString())
+                return (false, null, BadRequest(new ApiResponse<object>(400, "BadRequest", "Your service center has been deleted. Please contact administrator.")));
+
             if (targetCenterId != employee.CenterId)
                 return (false, null, StatusCode(403, new ApiResponse<object>(403, "Forbidden", $"{user.Role} can only {action} resources from their own service center (Center ID: {employee.CenterId}).")));
 

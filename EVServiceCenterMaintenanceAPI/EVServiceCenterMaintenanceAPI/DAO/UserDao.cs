@@ -85,6 +85,16 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
         public async Task<User> UpdateUserAsync(User user, string? newPassword = null)
         {
+            var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.UserId == user.UserId);
+            if (existingUser == null)
+                throw new Exception($"User with ID {user.UserId} not found.");
+
+            if (existingUser.Status == UserStatus.Deleted.ToString() &&
+                user.Status != UserStatus.Active.ToString())
+            {
+                throw new Exception("Cannot update deleted user. To restore, please set status to Active.");
+            }
+
             if (!string.IsNullOrEmpty(newPassword))
                 user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
 
@@ -94,7 +104,9 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
         public async Task<User> UpdatePasswordAsync(int userId, string oldPassword, string newPassword)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            var user = await _context.Users
+                .Where(u => u.UserId == userId && u.Status != UserStatus.Deleted.ToString())
+                .FirstOrDefaultAsync();
             if (user == null)
                 throw new Exception($"User with ID {userId} not found.");
 
@@ -119,9 +131,12 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 throw new ArgumentException(ErrorMessage);
             }
 
-            var query = queryParams.StatusUser.HasValue
-                ? _context.Users.IgnoreQueryFilters().AsQueryable()
-                : _context.Users.AsQueryable();
+            var query = _context.Users.AsQueryable();
+
+            if (!queryParams.StatusUser.HasValue)
+            {
+                query = query.Where(u => u.Status != UserStatus.Deleted.ToString());
+            }
 
             if (centerUserIds != null)
             {
@@ -176,7 +191,9 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
         public async Task<List<User>> GetUsersByRoleAsync(UserRole role)
         {
-            return await _context.Users.Where(u => u.Role == role.ToString()).ToListAsync();
+            return await _context.Users
+                .Where(u => u.Role == role.ToString() && u.Status != UserStatus.Deleted.ToString())
+                .ToListAsync();
         }
 
         public async Task<(List<User> Users, int Total)> GetUsersByRoleAsync(UserRole role, UserRoleQueryParams queryParams, HashSet<int>? centerUserIds = null)
@@ -188,6 +205,11 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             }
 
             var query = _context.Users.Where(u => u.Role == role.ToString());
+
+            if (!queryParams.StatusUser.HasValue)
+            {
+                query = query.Where(u => u.Status != UserStatus.Deleted.ToString());
+            }
 
             if (centerUserIds != null && role == UserRole.Admin)
             {

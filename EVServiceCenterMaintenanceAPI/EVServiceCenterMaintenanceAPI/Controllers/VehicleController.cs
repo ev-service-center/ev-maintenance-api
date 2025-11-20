@@ -274,6 +274,13 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 if (existingVehicle == null)
                     return NotFound(new ApiResponse<object>(404, "NotFound", "Vehicle not found."));
 
+                // Check if vehicle is inactive and not being restored
+                if (existingVehicle.Status == VehicleStatus.Inactive.ToString() &&
+                    (!dto.Status.HasValue || dto.Status.Value != VehicleStatus.Active))
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Cannot update inactive vehicle. To restore, please update the status to Active."));
+                }
+
                 // Get current user info
                 var userId = JwtHelper.GetUserIdFromHttpContext(HttpContext);
                 var userRole = User.FindFirst(ClaimTypes.Role)?.Value;

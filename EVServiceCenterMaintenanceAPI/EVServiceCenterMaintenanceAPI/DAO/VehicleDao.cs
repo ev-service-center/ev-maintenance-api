@@ -163,6 +163,16 @@ namespace EVServiceCenterMaintenanceAPI.DAO
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
+                var existingVehicle = await _context.Vehicles.FirstOrDefaultAsync(v => v.VehicleId == vehicle.VehicleId);
+                if (existingVehicle == null)
+                    throw new Exception($"Vehicle with ID {vehicle.VehicleId} not found.");
+
+                if (existingVehicle.Status == VehicleStatus.Inactive.ToString() &&
+                    vehicle.Status != VehicleStatus.Active.ToString())
+                {
+                    throw new Exception("Cannot update inactive vehicle. To restore, please set status to Active.");
+                }
+
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 

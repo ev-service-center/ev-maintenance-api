@@ -53,6 +53,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return BadRequest(new ApiResponse<object>(400, "BadRequest",
                     $"{userRole} user does not have an associated employee record."));
 
+            if (currentEmployee.Center == null || currentEmployee.Center.Status == ServiceCenterStatus.Deleted.ToString())
+                return BadRequest(new ApiResponse<object>(400, "BadRequest", "Your service center has been deleted. Please contact administrator."));
+
             if (centerId != currentEmployee.CenterId)
                 return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
                     $"{userRole} can only access appointment services from their own service center (Center ID: {currentEmployee.CenterId})."));
@@ -328,7 +331,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 // Validate ServiceId if provided
                 if (dto.ServiceId.HasValue)
                 {
-                    var service = await _context.Services.FindAsync(dto.ServiceId.Value);
+                    var service = await _context.Services
+                        .Where(s => s.ServiceId == dto.ServiceId.Value && s.Status != ServiceStatus.Inactive.ToString())
+                        .FirstOrDefaultAsync();
                     if (service == null)
                         return BadRequest(new ApiResponse<object>(400, "BadRequest", $"Service with ID {dto.ServiceId.Value} not found."));
                 }
@@ -342,7 +347,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                             "Technicians cannot assign or reassign services."));
                     }
 
-                    var technician = await _context.Users.FindAsync(dto.AssignedTechnicianId.Value);
+                    var technician = await _context.Users
+                        .Where(u => u.UserId == dto.AssignedTechnicianId.Value && u.Status != UserStatus.Deleted.ToString())
+                        .FirstOrDefaultAsync();
                     if (technician == null)
                         return BadRequest(new ApiResponse<object>(400, "BadRequest", $"User with ID {dto.AssignedTechnicianId.Value} not found."));
 
@@ -425,7 +432,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 }
 
                 // Validate Technician exists and is a Technician role
-                var technician = await _context.Users.FindAsync(dto.TechnicianId);
+                var technician = await _context.Users
+                    .Where(u => u.UserId == dto.TechnicianId && u.Status != UserStatus.Deleted.ToString())
+                    .FirstOrDefaultAsync();
                 if (technician == null)
                     return BadRequest(new ApiResponse<object>(400, "BadRequest", $"User with ID {dto.TechnicianId} not found."));
 

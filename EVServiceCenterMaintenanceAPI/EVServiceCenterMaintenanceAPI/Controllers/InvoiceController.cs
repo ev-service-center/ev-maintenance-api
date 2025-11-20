@@ -52,6 +52,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return BadRequest(new ApiResponse<object>(400, "BadRequest",
                     $"{userRole} user does not have an associated employee record."));
 
+            if (currentEmployee.Center == null || currentEmployee.Center.Status == ServiceCenterStatus.Deleted.ToString())
+                return BadRequest(new ApiResponse<object>(400, "BadRequest", "Your service center has been deleted. Please contact administrator."));
+
             if (invoiceCenterId != currentEmployee.CenterId)
                 return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
                     $"{userRole} can only access invoices from their own service center (Center ID: {currentEmployee.CenterId})."));
@@ -68,6 +71,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             if (currentEmployee == null)
                 return (null, BadRequest(new ApiResponse<object>(400, "BadRequest",
                     $"{userRole} user does not have an associated employee record.")));
+
+            if (currentEmployee.Center == null || currentEmployee.Center.Status == ServiceCenterStatus.Deleted.ToString())
+                return (null, BadRequest(new ApiResponse<object>(400, "BadRequest", "Your service center has been deleted. Please contact administrator.")));
 
             return (currentEmployee, null);
         }

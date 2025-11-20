@@ -84,7 +84,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         /// </summary>
         private async Task<IActionResult?> ValidateVehicleBelongsToCustomerAsync(int vehicleId, int customerId)
         {
-            var vehicle = await _context.Vehicles.FindAsync(vehicleId);
+            var vehicle = await _context.Vehicles
+                .Where(v => v.VehicleId == vehicleId && v.Status != VehicleStatus.Inactive.ToString())
+                .FirstOrDefaultAsync();
             if (vehicle == null)
                 return NotFound(new ApiResponse<object>(404, "NotFound", $"Vehicle with ID {vehicleId} not found."));
 
@@ -163,6 +165,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             if (currentEmployee == null)
                 return BadRequest(new ApiResponse<object>(400, "BadRequest",
                     $"{userRole} user does not have an associated employee record."));
+
+            if (currentEmployee.Center == null || currentEmployee.Center.Status == ServiceCenterStatus.Deleted.ToString())
+                return BadRequest(new ApiResponse<object>(400, "BadRequest", "Your service center has been deleted. Please contact administrator."));
 
             if (appointmentCenterId != currentEmployee.CenterId)
                 return StatusCode(403, new ApiResponse<object>(403, "Forbidden",

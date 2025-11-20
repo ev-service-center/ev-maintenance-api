@@ -59,6 +59,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 return BadRequest(new ApiResponse<object>(400, "BadRequest",
                     $"{userRole} user does not have an associated employee record."));
 
+            if (currentEmployee.Center == null || currentEmployee.Center.Status == ServiceCenterStatus.Deleted.ToString())
+                return BadRequest(new ApiResponse<object>(400, "BadRequest", "Your service center has been deleted. Please contact administrator."));
+
             if (workOrderCenterId != currentEmployee.CenterId)
                 return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
                     $"{userRole} can only access work orders from their own service center (Center ID: {currentEmployee.CenterId})."));
@@ -75,6 +78,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             if (currentEmployee == null)
                 return (null, BadRequest(new ApiResponse<object>(400, "BadRequest",
                     $"{userRole} user does not have an associated employee record.")));
+
+            if (currentEmployee.Center == null || currentEmployee.Center.Status == ServiceCenterStatus.Deleted.ToString())
+                return (null, BadRequest(new ApiResponse<object>(400, "BadRequest", "Your service center has been deleted. Please contact administrator.")));
 
             return (currentEmployee, null);
         }
@@ -223,7 +229,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 if (dto.CustomerId.HasValue || dto.VehicleId.HasValue)
                 {
                     // Validate Customer (final)
-                    var customer = await _context.Users.FindAsync(finalCustomerId);
+                    var customer = await _context.Users
+                        .Where(u => u.UserId == finalCustomerId && u.Status != UserStatus.Deleted.ToString())
+                        .FirstOrDefaultAsync();
                     if (customer == null)
                         return BadRequest(new ApiResponse<object>(400, "BadRequest", $"Customer with ID {finalCustomerId} not found."));
 
@@ -231,7 +239,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         return BadRequest(new ApiResponse<object>(400, "BadRequest", "Customer account is not active."));
 
                     // Validate Vehicle (final)
-                    var vehicle = await _context.Vehicles.FindAsync(finalVehicleId);
+                    var vehicle = await _context.Vehicles
+                        .Where(v => v.VehicleId == finalVehicleId && v.Status != VehicleStatus.Inactive.ToString())
+                        .FirstOrDefaultAsync();
                     if (vehicle == null)
                         return BadRequest(new ApiResponse<object>(400, "BadRequest", $"Vehicle with ID {finalVehicleId} not found."));
 

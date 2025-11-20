@@ -280,16 +280,13 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
         public async Task<(bool IsAvailable, string Message, Part? Part)> CheckStockAvailabilityAsync(int partId, int requestedQuantity)
         {
-            var part = await _context.Parts.FindAsync(partId);
+            var part = await _context.Parts
+                .Where(p => p.PartId == partId && p.Status == PartStatus.Active.ToString())
+                .FirstOrDefaultAsync();
 
             if (part == null)
             {
-                return (false, $"Part with ID {partId} not found.", null);
-            }
-
-            if (part.Status != PartStatus.Active.ToString())
-            {
-                return (false, $"Part '{part.PartName}' is not active.", part);
+                return (false, $"Part with ID {partId} not found or is not active.", null);
             }
 
             if (part.QuantityInStock == null || part.QuantityInStock < requestedQuantity)

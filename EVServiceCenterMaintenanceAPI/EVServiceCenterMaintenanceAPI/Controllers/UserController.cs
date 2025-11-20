@@ -178,6 +178,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         if (currentEmployee == null)
                             return BadRequest(new ApiResponse<object>(400, "BadRequest", "Staff user does not have an associated employee record."));
 
+                        if (currentEmployee.Center == null || currentEmployee.Center.Status == ServiceCenterStatus.Deleted.ToString())
+                            return BadRequest(new ApiResponse<object>(400, "BadRequest", "Your service center has been deleted. Please contact administrator."));
+
                         var targetEmployee = await _employeeDao.GetEmployeeByIdAsync(id);
                         if (targetEmployee == null || targetEmployee.CenterId != currentEmployee.CenterId)
                             return StatusCode(403, new ApiResponse<object>(403, "Forbidden", "Staff can only view Staff/Technician users from their own service center."));
@@ -301,6 +304,12 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 var existingUser = await _userDao.GetUserByIdAsync(id);
                 if (existingUser == null)
                     return NotFound(new ApiResponse<object>(404, "NotFound", "User not found."));
+
+                if (existingUser.Status == UserStatus.Deleted.ToString() &&
+                    (!userDto.Status.HasValue || userDto.Status.Value == UserStatus.Deleted))
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Cannot update deleted user. To restore, please update the status to Active."));
+                }
 
                 // Check if email is being changed and if new email already exists
                 if (userDto.Email != null && existingUser.Email != userDto.Email)

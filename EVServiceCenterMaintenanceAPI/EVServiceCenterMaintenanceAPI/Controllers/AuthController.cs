@@ -23,6 +23,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
         private readonly EmailService _emailService;
         private readonly ITokenBlacklistService _tokenBlacklistService;
         private readonly EvserviceCenterDbContext _context;
+        private readonly EmployeeDao _employeeDao;
 
         public AuthController(
             UserDao userDao,
@@ -30,7 +31,8 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             IConfiguration configuration,
             EmailService emailService,
             ITokenBlacklistService tokenBlacklistService,
-            EvserviceCenterDbContext context)
+            EvserviceCenterDbContext context,
+            EmployeeDao employeeDao)
         {
             _userDao = userDao ?? throw new ArgumentNullException(nameof(userDao));
             _authDao = authDao ?? throw new ArgumentNullException(nameof(authDao));
@@ -38,6 +40,7 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
             _emailService = emailService ?? throw new ArgumentNullException(nameof(emailService));
             _tokenBlacklistService = tokenBlacklistService ?? throw new ArgumentNullException(nameof(tokenBlacklistService));
             _context = context ?? throw new ArgumentNullException(nameof(context));
+            _employeeDao = employeeDao ?? throw new ArgumentNullException(nameof(employeeDao));
         }
 
         [HttpPost("register")]
@@ -516,6 +519,16 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 // Check admin role if required
                 if (requireAdmin && user.Role != UserRole.Admin.ToString())
                     return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<object>(403, "Forbidden", "Account is not authorized to login here."));
+
+                // Check if Staff/Technician's service center has been deleted
+                if (user.Role == UserRole.Staff.ToString() || user.Role == UserRole.Technician.ToString())
+                {
+                    var employee = await _employeeDao.GetEmployeeByIdAsync(user.UserId);
+                    if (employee?.Center != null && employee.Center.Status == ServiceCenterStatus.Deleted.ToString())
+                    {
+                        return Conflict(new ApiResponse<object>(409, "Conflict", "Your service center has been deleted. Please contact administrator."));
+                    }
+                }
 
                 var deviceHash = HashDeviceInfo(Request.Headers["User-Agent"].ToString());
                 var roles = new List<string> { user.Role };

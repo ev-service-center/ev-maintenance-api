@@ -48,6 +48,11 @@ namespace EVServiceCenterMaintenanceAPI.DAO
 
             var query = _context.Services.AsNoTracking().AsQueryable();
 
+            if (!queryParams.StatusService.HasValue)
+            {
+                query = query.Where(s => s.Status != ServiceStatus.Inactive.ToString());
+            }
+
             // Apply filters
             if (!string.IsNullOrEmpty(queryParams.Search))
                 query = query.Where(s => s.ServiceName.Contains(queryParams.Search));
@@ -122,6 +127,12 @@ namespace EVServiceCenterMaintenanceAPI.DAO
                 var existingService = await _context.Services.FirstOrDefaultAsync(s => s.ServiceId == service.ServiceId);
                 if (existingService == null)
                     throw new Exception($"Service with ID {service.ServiceId} not found.");
+                
+                if (existingService.Status == ServiceStatus.Inactive.ToString() && 
+                    service.Status != ServiceStatus.Active.ToString())
+                {
+                    throw new Exception("Cannot update inactive service. To restore, please set status to Active.");
+                }
 
                 existingService.ServiceName = service.ServiceName;
                 existingService.Description = service.Description;

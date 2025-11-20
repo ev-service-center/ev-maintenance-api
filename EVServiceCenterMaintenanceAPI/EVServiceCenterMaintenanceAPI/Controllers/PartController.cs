@@ -118,6 +118,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                         return BadRequest(new ApiResponse<object>(400, "BadRequest",
                             $"{currentUser.Role} user does not have an associated employee record."));
 
+                    if (currentEmployee.Center == null || currentEmployee.Center.Status == ServiceCenterStatus.Deleted.ToString())
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", "Your service center has been deleted. Please contact administrator."));
+
                     if (part.CenterId != currentEmployee.CenterId)
                         return StatusCode(403, new ApiResponse<object>(403, "Forbidden",
                             $"{currentUser.Role} can only view parts from their own service center (Center ID: {currentEmployee.CenterId})."));
@@ -204,6 +207,9 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                     if (currentEmployee == null)
                         return BadRequest(new ApiResponse<object>(400, "BadRequest",
                             $"{currentUser.Role} user does not have an associated employee record."));
+
+                    if (currentEmployee.Center == null || currentEmployee.Center.Status == ServiceCenterStatus.Deleted.ToString())
+                        return BadRequest(new ApiResponse<object>(400, "BadRequest", "Your service center has been deleted. Please contact administrator."));
 
                     // Nếu có CenterId trong query params và khác center của họ -> Forbidden
                     if (queryParams.CenterId.HasValue && queryParams.CenterId.Value != currentEmployee.CenterId)
@@ -320,6 +326,13 @@ namespace EVServiceCenterMaintenanceAPI.Controllers
                 var existingPart = await _partDao.GetPartByIdAsync(id);
                 if (existingPart == null)
                     return NotFound(new ApiResponse<object>(404, "NotFound", "Part not found."));
+
+                // Check if part is inactive and not being restored
+                if (existingPart.Status == PartStatus.Inactive.ToString() &&
+                    (!dto.Status.HasValue || dto.Status.Value != PartStatus.Active))
+                {
+                    return BadRequest(new ApiResponse<object>(400, "BadRequest", "Cannot update inactive part. To restore, please update the status to Active."));
+                }
 
                 // Validate Price >= CostPrice before updating
                 var finalCostPrice = dto.CostPrice ?? existingPart.CostPrice;
